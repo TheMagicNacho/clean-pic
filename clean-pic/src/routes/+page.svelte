@@ -20,7 +20,13 @@
     event.preventDefault();
     thinking = true;
     console.log("Scrubbing folder:", folderPath);
-    const result = String(await invoke("scrub_images", { path: folderPath }));
+    let save_directory = "OwO-Clean";
+    const result = String(
+      await invoke("scrub_images", {
+        path: folderPath,
+        saveDirectory: save_directory,
+      }),
+    );
     console.log("Scrub result:", result);
     thinking = false;
     await openPath(result);

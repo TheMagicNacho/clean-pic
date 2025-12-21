@@ -176,10 +176,15 @@ async fn generate_filename(save_directory: &PathBuf) -> tokio::io::Result<(PathB
 }
 
 #[tauri::command]
-async fn scrub_images(path: &str) -> Result<String, ()> {
+async fn scrub_images(path: &str, save_directory: &str) -> Result<String, ()> {
     let path = PathBuf::from(path);
-    // TODO: Make scrubbed_images configurable
-    let save_directory = make_write_dir(&path, "scrubbed_images").await.unwrap();
+    // create a default if the client forgets to supply a directory.
+    let save_directory = match save_directory {
+        "" => "scrubbed_images",
+        _ => save_directory,
+    };
+
+    let save_directory = make_write_dir(&path, save_directory).await.unwrap();
     println!("Saving scrubbed image to {:?}", save_directory);
     let mut stats = BatchStats::new();
 
