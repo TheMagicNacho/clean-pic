@@ -7,6 +7,35 @@ use std::fs::File;
 use std::io::Error;
 use std::path::PathBuf;
 
+/// image_stats provide stats on a particular image's cleanning process.
+struct ImageReturn {
+    img_data: Vec<u8>,
+    segments_removed: u32,
+    bits_removed: usize,
+}
+
+/// batch_stats is the combined stats of the entire process.
+struct BatchStats {
+    total_segments: u32,
+    total_bits: usize,
+    total_files: u32,
+}
+impl BatchStats {
+    fn new() -> BatchStats {
+        BatchStats {
+            total_segments: 0,
+            total_bits: 0,
+            total_files: 0,
+        }
+    }
+
+    fn add(&mut self, file_stats: &ImageReturn) {
+        self.total_segments += file_stats.segments_removed;
+        self.total_bits += file_stats.bits_removed;
+        self.total_files += 1;
+    }
+}
+
 fn is_image(path: PathBuf) -> bool {
     let img_extensions: HashMap<&str, bool> = [
         ("jpg", true),
@@ -47,14 +76,15 @@ async fn gather_files(path: &PathBuf) -> Vec<String> {
     files
 }
 
-async fn remove_metadata_jpeg(input_bytes: Vec<u8>) -> Result<Vec<u8>, Error> {
+async fn remove_metadata_jpeg(input_bytes: Vec<u8>) -> Result<ImageReturn, Error> {
     // Parse the JPEG structure from the byte array
     // This does NOT decode the actual image pixels, so it's fast and lossless
     let mut jpeg = img_parts::jpeg::Jpeg::from_bytes(input_bytes.into()).unwrap();
 
     jpeg.set_exif(None);
     jpeg.set_icc_profile(None);
-
+    let mut segments_removed = 0;
+    let mut bits_removed = 0;
     jpeg.segments_mut().retain(|segment| {
         match segment.marker() {
             // --- CRITICAL FOR DECODING ---
@@ -77,13 +107,23 @@ async fn remove_metadata_jpeg(input_bytes: Vec<u8>) -> Result<Vec<u8>, Error> {
 
             // --- EVERYTHING ELSE IS REMOVED ---
             // APP1 (Exif), APP2 (ICC), COM (Comments), etc.
-            _ => false,
+            _ => {
+                segments_removed += 1;
+                bits_removed += segment.len();
+                false
+            }
         }
     });
-    let mut output_bytes = Vec::new();
-    jpeg.encoder().write_to(&mut output_bytes)?;
+    let mut img_data = Vec::new();
+    jpeg.encoder().write_to(&mut img_data)?;
 
-    Ok(output_bytes)
+    let output = ImageReturn {
+        img_data,
+        segments_removed,
+        bits_removed,
+    };
+
+    Ok(output)
 }
 
 // creates a directory to store new files within the given path
@@ -118,8 +158,11 @@ async fn generate_filename() -> String {
 async fn scrub_images(path: &str) -> Result<String, ()> {
     let path = PathBuf::from(path);
     // TODO: Make scrubbed_images configurable
+    // TODO: App panics if the directory is not empty.
     let save_directory = make_write_dir(&path, "scrubbed_images").await.unwrap();
     println!("Saving scrubbed image to {:?}", save_directory);
+    let mut stats = BatchStats::new();
+
     let files = gather_files(&path).await;
     for file in files {
         println!("Processing file: {}", &file);
@@ -129,18 +172,22 @@ async fn scrub_images(path: &str) -> Result<String, ()> {
             image::ImageFormat::Jpeg => {
                 let input_data = std::fs::read(file).unwrap();
                 let output_data = remove_metadata_jpeg(input_data).await.unwrap();
+                // println!(
+                //     "Return OBJ: Tags removed: {:?} Bits Removed: {:#?}",
+                //     output_data.segments_removed, output_data.bits_removed
+                // );
                 let new_name = generate_filename().await;
                 let new_path = format!("{}/{}.jpg", save_directory.display(), new_name);
 
-                std::fs::write(new_path, output_data).unwrap();
+                stats.add(&output_data);
+                std::fs::write(new_path, output_data.img_data).unwrap();
             }
-            image::ImageFormat::Png => todo!("PNG"),
-            image::ImageFormat::Tiff => todo!("TIFF"),
-            _ => todo!("Other formats"),
+            // image::ImageFormat::Png => todo!("PNG"),
+            // image::ImageFormat::Tiff => todo!("TIFF"),
+            _ => println!("Unable to process file format. Try resaving the image."),
         };
     }
-
-    Ok("Scrubbing complete".to_string())
+    Ok(save_directory.display().to_string())
 }
 
 #[tauri::command]
