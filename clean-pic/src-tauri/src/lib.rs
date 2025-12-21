@@ -3,9 +3,10 @@ use img_parts::{ImageEXIF, ImageICC};
 use log::debug;
 use rand::prelude::*;
 use std::collections::HashMap;
-use std::fs::File;
+// use std::fs::File;
 use std::io::Error;
 use std::path::PathBuf;
+use tokio::fs::{File, OpenOptions};
 
 /// image_stats provide stats on a particular image's cleanning process.
 struct ImageReturn {
@@ -64,7 +65,7 @@ async fn gather_files(path: &PathBuf) -> Vec<String> {
             while let Ok(Some(entry)) = dir.next_entry().await {
                 let path_buf = entry.path();
                 if is_image(path_buf.clone()) {
-                    match File::open(&path_buf) {
+                    match tokio::fs::try_exists(&path_buf).await {
                         Ok(_) => files.push(path_buf.to_str().unwrap().to_string()),
                         Err(e) => debug!("Error opening file: {}", e),
                     }
@@ -136,8 +137,8 @@ async fn make_write_dir(path: &PathBuf, new_dir: &str) -> Result<PathBuf, Error>
         Ok(_) => Ok(new_path),
         Err(e) => {
             if e.kind() == std::io::ErrorKind::AlreadyExists {
-                tokio::fs::remove_dir(&new_path).await?;
-                tokio::fs::create_dir(&new_path).await?;
+                Ok(new_path)
+            } else if e.kind() == std::io::ErrorKind::DirectoryNotEmpty {
                 Ok(new_path)
             } else {
                 Err(e)
@@ -146,19 +147,38 @@ async fn make_write_dir(path: &PathBuf, new_dir: &str) -> Result<PathBuf, Error>
     }
 }
 
-async fn generate_filename() -> String {
-    let mut rng = rand::rng();
+/// There is the 32! propbability of a collision, so if there is a collision detected we'll
+/// regenerate a new filename.
+async fn generate_filename(save_directory: &PathBuf) -> tokio::io::Result<(PathBuf, File)> {
+    loop {
+        let new_name = {
+            let mut rng = rand::rng();
+            let name = rng.random::<u32>();
+            format!("{:#}", name)
+        };
+        let new_path = save_directory.join(format!("{}.jpg", new_name));
 
-    let name = rng.random::<u32>();
+        let file_result = OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(&new_path)
+            .await;
 
-    format!("{:#}", name)
+        match file_result {
+            // Success: We reserved the filename and have the handle
+            Ok(file) => return Ok((new_path, file)),
+            // Collision: File exists, loop again
+            Err(ref e) if e.kind() == tokio::io::ErrorKind::AlreadyExists => continue,
+            // Real Error: Permission denied, disk full, etc.
+            Err(e) => return Err(e),
+        }
+    }
 }
 
 #[tauri::command]
 async fn scrub_images(path: &str) -> Result<String, ()> {
     let path = PathBuf::from(path);
     // TODO: Make scrubbed_images configurable
-    // TODO: App panics if the directory is not empty.
     let save_directory = make_write_dir(&path, "scrubbed_images").await.unwrap();
     println!("Saving scrubbed image to {:?}", save_directory);
     let mut stats = BatchStats::new();
@@ -172,15 +192,10 @@ async fn scrub_images(path: &str) -> Result<String, ()> {
             image::ImageFormat::Jpeg => {
                 let input_data = std::fs::read(file).unwrap();
                 let output_data = remove_metadata_jpeg(input_data).await.unwrap();
-                // println!(
-                //     "Return OBJ: Tags removed: {:?} Bits Removed: {:#?}",
-                //     output_data.segments_removed, output_data.bits_removed
-                // );
-                let new_name = generate_filename().await;
-                let new_path = format!("{}/{}.jpg", save_directory.display(), new_name);
+                let new_path = generate_filename(&save_directory).await.unwrap();
 
                 stats.add(&output_data);
-                std::fs::write(new_path, output_data.img_data).unwrap();
+                std::fs::write(new_path.0, output_data.img_data).unwrap();
             }
             // image::ImageFormat::Png => todo!("PNG"),
             // image::ImageFormat::Tiff => todo!("TIFF"),
@@ -218,5 +233,5 @@ pub fn run() {
         .plugin(tauri_plugin_opener::init())
         .invoke_handler(tauri::generate_handler![count_images, scrub_images])
         .run(tauri::generate_context!())
-        .expect("error Ehile running tauri application");
+        .expect("error While running tauri application");
 }
