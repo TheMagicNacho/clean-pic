@@ -88,6 +88,12 @@ async fn remove_metadata_jpeg(input_bytes: Vec<u8>) -> Result<ImageReturn, Error
     let mut bits_removed = 0;
     jpeg.segments_mut().retain(|segment| {
         match segment.marker() {
+            // --- MANDATORY JPEG MARKERS ---
+            // SOI: Start of Image (0xFFD8) - REQUIRED at file start
+            img_parts::jpeg::markers::SOI => true,
+            // EOI: End of Image (0xFFD9) - REQUIRED at file end
+            img_parts::jpeg::markers::EOI => true,
+
             // --- CRITICAL FOR DECODING ---
             // SOF0: Baseline DCT (Standard JPEG)
             img_parts::jpeg::markers::SOF0 => true,
@@ -156,7 +162,7 @@ async fn generate_filename(save_directory: &PathBuf) -> tokio::io::Result<(PathB
             let name = rng.random::<u32>();
             format!("{:#}", name)
         };
-        let new_path = save_directory.join(format!("{}.jpg", new_name));
+        let new_path = save_directory.join(format!("{}.jpeg", new_name));
 
         let file_result = OpenOptions::new()
             .write(true)
@@ -174,6 +180,78 @@ async fn generate_filename(save_directory: &PathBuf) -> tokio::io::Result<(PathB
         }
     }
 }
+#[tauri::command]
+async fn inspect_image(path: &str) -> Result<Vec<(String, String)>, String> {
+    let data = std::fs::read(path).map_err(|e| format!("Failed to read file: {}", e))?;
+
+    let jpeg = img_parts::jpeg::Jpeg::from_bytes(data.into())
+        .map_err(|e| format!("Failed to parse JPEG: {}", e))?;
+
+    let mut output = Vec::new();
+
+    // EXIF data
+    if let Some(exif_data) = jpeg.exif() {
+        output.push(("EXIF".to_string(), format!("{} bytes", exif_data.len())));
+
+        // Parse EXIF fields
+        let mut cursor = std::io::Cursor::new(exif_data);
+        if let Ok(exif) = exif::Reader::new().read_from_container(&mut cursor) {
+            for f in exif.fields() {
+                let key = format!("EXIF:{}", f.tag);
+                let value = format!("{}", f.display_value().with_unit(&exif));
+                output.push((key, value));
+            }
+        }
+    }
+
+    // ICC Profile
+    if let Some(icc_data) = jpeg.icc_profile() {
+        output.push((
+            "ICC Profile".to_string(),
+            format!("{} bytes", icc_data.len()),
+        ));
+    }
+
+    // All other segments
+    for segment in jpeg.segments() {
+        let marker_name = match segment.marker() {
+            img_parts::jpeg::markers::APP0 => "APP0 (JFIF)",
+            img_parts::jpeg::markers::APP1 => "APP1 (EXIF/XMP)",
+            img_parts::jpeg::markers::APP2 => "APP2 (ICC)",
+            img_parts::jpeg::markers::APP14 => "APP14 (Adobe)",
+            img_parts::jpeg::markers::COM => "COM (Comment)",
+            m => &format!("Marker 0x{:04X}", m),
+        };
+        output.push((marker_name.to_string(), format!("{} bytes", segment.len())));
+    }
+
+    Ok(output)
+}
+// NOTE: Return this code if we want a more simplified EXIF-only inspection
+// #[tauri::command]
+// async fn inspect_image(path: &str) -> Result<Vec<(String, String)>, String> {
+//     let file = match std::fs::File::open(path) {
+//         Ok(f) => f,
+//         Err(e) => return Err(format!("Failed to open file: {}", e)),
+//     };
+//
+//     let mut bufreader = std::io::BufReader::new(&file);
+//     let exifreader = exif::Reader::new();
+//
+//     match exifreader.read_from_container(&mut bufreader) {
+//         Ok(exif) => {
+//             let mut output = Vec::new();
+//             for f in exif.fields() {
+//                 let key = format!("{}", f.tag);
+//                 let value = format!("{}", f.display_value().with_unit(&exif));
+//                 output.push((key, value));
+//             }
+//             Ok(output)
+//         }
+//         Err(exif::Error::NotFound(_)) => Ok(Vec::new()),
+//         Err(e) => Err(format!("Failed to read EXIF: {}", e)),
+//     }
+// }
 
 #[tauri::command]
 async fn scrub_images(path: &str, save_directory: &str) -> Result<String, ()> {
@@ -236,7 +314,11 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_opener::init())
-        .invoke_handler(tauri::generate_handler![count_images, scrub_images])
+        .invoke_handler(tauri::generate_handler![
+            count_images,
+            scrub_images,
+            inspect_image
+        ])
         .run(tauri::generate_context!())
         .expect("error While running tauri application");
 }

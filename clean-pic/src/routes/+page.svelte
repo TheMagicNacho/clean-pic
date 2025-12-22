@@ -1,19 +1,22 @@
 <script lang="ts">
-  import {invoke} from "@tauri-apps/api/core";
-  import {open} from "@tauri-apps/plugin-dialog";
-  import {openPath} from "@tauri-apps/plugin-opener";
-  import {fly} from "svelte/transition";
+    import {invoke} from "@tauri-apps/api/core";
+    import {open} from "@tauri-apps/plugin-dialog";
+    import {openPath} from "@tauri-apps/plugin-opener";
+    import {fly} from "svelte/transition";
 
-  let folderPath = $state("");
+    let folderPath = $state("");
     let numberOfFiles = $state(-1);
     let thinking = $state(false);
     let cleanPath = $state("");
     let saveDirectory = $state("OwO-Clean");
     let isDrawerOpen = $state(false);
 
-    // function toggleDrawer() {
-    //     isDrawerOpen = !isDrawerOpen;
-    // }
+    let activeView: "scrub" | "inspect" = $state("scrub");
+
+    // Inspect view state
+    let imagePath = $state("");
+    let imageMetadata = $state<Record<string, string> | null>(null);
+    let inspecting = $state(false);
 
     function openDrawer() {
         isDrawerOpen = true;
@@ -28,6 +31,8 @@
         folderPath = "";
         numberOfFiles = -1;
         cleanPath = "";
+        imagePath = "";
+        imageMetadata = null;
     }
 
     async function scrubDirectory(event: Event) {
@@ -63,6 +68,39 @@
         }
         thinking = false;
     }
+
+    function createImageMetadataObject(rawData: [string, string][]) {
+        let output: Record<string, string> = {};
+
+        for (let dataPair of rawData) {
+            console.log(`dataPair: ${dataPair}`);
+            const [key, value] = dataPair;
+            output[key] = value;
+        }
+        return output;
+    }
+
+    async function selectImage(event: Event) {
+        event.preventDefault();
+        inspecting = true;
+        imageMetadata = null;
+        const selected = await open({
+            directory: false,
+            multiple: false,
+            title: "Select an image to inspect",
+        });
+        if (typeof selected === "string") {
+            imagePath = selected;
+            console.log("Selected image:", imagePath);
+            // TODO: invoke backend to get image metadata
+            const metadata = await invoke("inspect_image", {path: imagePath});
+            console.log(`metadata: ${metadata}`);
+            imageMetadata = createImageMetadataObject(metadata as [string, string][]);
+        } else {
+            console.log("No image selected");
+        }
+        inspecting = false;
+    }
 </script>
 
 {#if !isDrawerOpen}
@@ -97,7 +135,7 @@
         >
             <label for="save-dir">Save Directory Name</label>
             <input id="save-dir" type="text" bind:value={saveDirectory}/>
-            <hr>
+            <hr/>
             <label for="reset-state">Reset Application State</label>
             <form id="reset-state" onsubmit={resetState}>
                 <button type="submit">Reset</button>
@@ -109,30 +147,81 @@
 <main class="container">
     <h1>0w0 scrubby buddy</h1>
 
-    <form class="row" onsubmit={selectFolder}>
-        <button type="submit">Select Folder</button>
-    </form>
+    <div class="view-switcher">
+        <button
+                class:active={activeView === "scrub"}
+                onclick={() => (activeView = "scrub")}>Scrub
+        </button
+        >
+        <button
+                class:active={activeView === "inspect"}
+                onclick={() => (activeView = "inspect")}>Inspect
+        </button
+        >
+    </div>
 
-    {#if folderPath}
-        {#if numberOfFiles === -1}
-            <p>Counting images...</p>
-        {/if}
-        {#if numberOfFiles === 0}
-            <p>No images found in the selected folder.</p>
-        {/if}
-
-        {#if numberOfFiles > 0}
-            <p>Number of images found: {numberOfFiles}</p>
-            <form class="row" onsubmit={scrubDirectory}>
-                <button type="submit">Scrub Me Daddy</button>
+    <!--    SCRUBBING SECTION -->
+    {#if activeView === "scrub"}
+        <div transition:fly={{ x: -200, duration: 300 }}>
+            <form class="row" onsubmit={selectFolder}>
+                <button type="submit">Select Folder</button>
             </form>
-        {/if}
+
+            {#if folderPath}
+                {#if numberOfFiles === -1}
+                    <p>Counting images...</p>
+                {/if}
+                {#if numberOfFiles === 0}
+                    <p>No images found in the selected folder.</p>
+                {/if}
+
+                {#if numberOfFiles > 0}
+                    <p>Number of images found: {numberOfFiles}</p>
+                    <form class="row" onsubmit={scrubDirectory}>
+                        <button type="submit">Scrub Me Daddy</button>
+                    </form>
+                {/if}
+            {/if}
+            {#if cleanPath}
+                <p>I'm all squeaky clean: {cleanPath}</p>
+                <form class="row" onsubmit={resetState}>
+                    <button type="submit">Reset</button>
+                </form>
+            {/if}
+        </div>
     {/if}
-    {#if cleanPath}
-        <p>I'm all squeaky clean: {cleanPath}</p>
-        <form class="row" onsubmit={resetState}>
-            <button type="submit">Reset</button>
-        </form>
+
+    <!--INSPECTION SECTION-->
+    {#if activeView === "inspect"}
+        <div transition:fly={{ x: 200, duration: 300 }}>
+            <form class="row" onsubmit={selectImage}>
+                <button type="submit">Select Image</button>
+            </form>
+
+            {#if inspecting}
+                <p>Inspecting...</p>
+            {/if}
+
+            {#if imagePath && imageMetadata}
+                <p>Showing metadata for: {imagePath}</p>
+                <table class="metadata-table">
+                    <thead>
+                    <tr>
+                        <th>Key</th>
+                        <th>Value</th>
+                    </tr>
+                    </thead>
+                    <tbody>
+                    {#each Object.entries(imageMetadata) as [key, value]}
+                        <tr>
+                            <td>{key}</td>
+                            <td>{value}</td>
+                        </tr>
+                    {/each}
+                    </tbody>
+                </table>
+            {/if}
+        </div>
     {/if}
 </main>
 
@@ -226,7 +315,7 @@
 
     .container {
         margin: 0;
-        padding-top: 10vh;
+        /*padding-top: 10vh;*/
         display: flex;
         flex-direction: column;
         justify-content: center;
@@ -247,6 +336,41 @@
     .row {
         display: flex;
         justify-content: center;
+    }
+
+    .view-switcher {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 2rem;
+        gap: 0.5rem;
+    }
+
+    .view-switcher button {
+        background-color: transparent;
+        border: 1px solid #ccc;
+    }
+
+    .view-switcher button.active {
+        border-color: #396cd8;
+        background-color: #e8e8e8;
+    }
+
+    .metadata-table {
+        margin: 2rem auto;
+        border-collapse: collapse;
+        width: 80%;
+        max-width: 600px;
+    }
+
+    .metadata-table th,
+    .metadata-table td {
+        border: 1px solid #ddd;
+        padding: 8px;
+        text-align: left;
+    }
+
+    .metadata-table th {
+        background-color: #f2f2f2;
     }
 
     a {
@@ -303,6 +427,24 @@
         :root {
             color: #f6f6f6;
             background-color: #2f2f2f;
+        }
+
+        .view-switcher button {
+            border-color: #555;
+        }
+
+        .view-switcher button.active {
+            border-color: #24c8db;
+            background-color: #0f0f0f69;
+        }
+
+        .metadata-table th,
+        .metadata-table td {
+            border: 1px solid #444;
+        }
+
+        .metadata-table th {
+            background-color: #3a3a3a;
         }
 
         a:hover {
