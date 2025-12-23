@@ -35,21 +35,23 @@
         }
     }
 
-    // Button hover descriptions
+    // Button tool tips
     const buttonDescriptions: Record<string, string> = {
-        "select-folder": "I'll scrub all the images in the directory you choose, then save the cleaned images in a folder for you! The original images will be left unchanged.",
-        "scrub": "Let's clean those images! I'll remove all metadata and make them squeaky clean! You can change the folder name I save to by clicking on the hamburger menu in the top right!",
-        "reset": "This will wash away everything and start fresh!",
-        "select-image": "Pick an image and I'll show you all the hidden metadata inside! Even clean files have a small amount of data to help tell devices how to render the image. The question is if you are ok with the data I find!",
+        "select-folder": "I'll scrub all the images in the folder you choose, then save the cleaned images in a new folder for you! The original images will be left unchanged.",
+        "scrub": "Let's clean those images! I'll remove all metadata and make them squeaky clean! You can change the folder name I save to by clicking on the menu in the top right!",
+        "reset": "This will wash away everything so we can start fresh!",
+        "select-image": "Pick an image and I'll show you all the hidden metadata inside! Even clean files have a small amount of metadata to help tell devices how to render the image.",
         "scrub-view": "Switch to scrub mode to scrub out all that pesky metadata from your images!",
         "inspect-view": "Let's switch to inspect mode and take a peek at that sweet sweet image data!",
     };
+    // Things the bear says in reaction to user actions
     const reactionScript: Record<string, string> = {
-        "scrubbing": "Please wait, I'm scrubbing as fast as I can!",
-        "all-done": "All done! Squeaky clean, daddy! ",
+        "scrubbing": "Pweeese wait, I'm scrubbing as fast as I can!",
+        "all-done": "I'm done now, Daddy. Squeaky clean, just for you!",
         "found": "Here are all the images I could find in the folder you gave me.",
         "no-find": "I'm sorry, daddy! I couldn't find any images for you.",
         "thinking": "hummmmm...",
+        "what-i-found": "Look, Daddy! Here's what I found hiding inside your image!",
     };
 
     function onButtonHover(buttonId: string) {
@@ -85,17 +87,17 @@
     async function scrubDirectory(event: Event) {
         event.preventDefault();
         thinking = true;
-        setBearState("talking", reactionScript["scrubbing"], 8000);
-        console.log("Scrubbing folder:", folderPath);
+        setBearState("talking", reactionScript["scrubbing"], 10000);
+        // console.log("Scrubbing folder:", folderPath);
         const result = String(
             await invoke("scrub_images", {
                 path: folderPath,
                 saveDirectory: saveDirectory,
             }),
         );
-        console.log("Scrub result:", result);
+        // console.log("Scrub result:", result);
         thinking = false;
-        setBearState("talking", reactionScript["all-done"], 8000);
+        setBearState("talking", reactionScript["all-done"], 10000);
         await openPath(result);
         cleanPath = result;
     }
@@ -103,7 +105,7 @@
     async function selectFolder(event: Event) {
         event.preventDefault();
         thinking = true;
-        // setBearState("looking", "I'm looking for your images", 0);
+        setBearState("looking", "I'm looking for your images", 8000);
         const selected = await open({
             directory: true,
             multiple: false,
@@ -111,15 +113,15 @@
         });
         if (typeof selected === "string") {
             folderPath = selected;
-            console.log("Selected folder:", folderPath);
+            // console.log("Selected folder:", folderPath);
             numberOfFiles = await invoke("count_images", {path: folderPath});
             if (numberOfFiles > 0) {
-                setBearState("talking", reactionScript["found"], 8000);
+                setBearState("talking", reactionScript["found"], 10000);
             } else {
-                setBearState("talking", reactionScript["no-find"], 8000);
+                setBearState("talking", reactionScript["no-find"], 10000);
             }
         } else {
-            console.log("No folder selected");
+            // console.log("No folder selected");
             setBearState("waiting", "");
         }
         thinking = false;
@@ -129,7 +131,7 @@
         let output: Record<string, string> = {};
 
         for (let dataPair of rawData) {
-            console.log(`dataPair: ${dataPair}`);
+            // console.log(`dataPair: ${dataPair}`);
             const [key, value] = dataPair;
             output[key] = value;
         }
@@ -140,7 +142,7 @@
         event.preventDefault();
         inspecting = true;
         imageMetadata = null;
-        setBearState("looking", reactionScript["thinking"], 3000);
+        setBearState("looking", reactionScript["thinking"], 10000);
         const selected = await open({
             directory: false,
             multiple: false,
@@ -148,12 +150,9 @@
         });
         if (typeof selected === "string") {
             imagePath = selected;
-            console.log("Selected image:", imagePath);
-            // TODO: invoke backend to get image metadata
             const metadata = await invoke("inspect_image", {path: imagePath});
-            console.log(`metadata: ${metadata}`);
             imageMetadata = createImageMetadataObject(metadata as [string, string][]);
-            setBearState("talking", "Look, daddy! Here's what I found for you! 📋", 8000);
+            setBearState("talking", reactionScript["what-i-found"], 10000);
         } else {
             console.log("No image selected");
             setBearState("waiting", "");
@@ -181,7 +180,7 @@
             <label for="save-dir">Save Directory Name</label>
             <input id="save-dir" type="text" bind:value={saveDirectory}/>
             <hr/>
-            <label for="reset-state">Reset Application State</label>
+            <label for="reset-state">Reset application state</label>
             <form id="reset-state" onsubmit={resetState}>
                 <button type="submit">Reset</button>
             </form>
@@ -190,19 +189,19 @@
 {/if}
 
 <main class="container">
+    <!-- Kawaii decorative elements -->
+    <div class="kawaii-star-1">⭐</div>
+    <div class="kawaii-star-2">✨</div>
+    <div class="kawaii-star-3">🌟</div>
+
     <h1>0w0 scrubby buddy</h1>
     {#if !isDrawerOpen}
-        <div
+        <button
                 class="hamburger-menu"
                 onclick={openDrawer}
-                onkeydown={() => {}}
-                role="button"
-                tabindex="0"
         >
-            <div></div>
-            <div></div>
-            <div></div>
-        </div>
+            MENU
+        </button>
     {/if}
 
     <div class="view-switcher">
@@ -328,60 +327,89 @@
 
     /** Speech bubble styles **/
     .speech-bubble {
-        background: #fff;
-        border-radius: 12px;
-        padding: 10px 14px;
-        max-width: 180px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        background: linear-gradient(135deg, var(--kawaii-white) 0%, var(--kawaii-pastel-pink) 100%);
+        border-radius: 20px;
+        border: 3px solid var(--kawaii-soft-pink);
+        padding: 15px 20px;
+        max-width: 200px;
+        box-shadow: 0 8px 25px var(--kawaii-shadow);
         position: absolute;
         bottom: 8rem;
         left: 1.5rem;
         order: 2;
+        animation: gentleFloat 3s ease-in-out infinite;
+        position: relative;
+    }
+
+    .speech-bubble::before {
+        content: '💭';
+        position: absolute;
+        top: -10px;
+        right: -10px;
+        font-size: 1.2em;
+        animation: sparkle 2s ease-in-out infinite;
     }
 
     .speech-bubble p {
         margin: 0;
-        font-size: 12px;
-        color: #333;
+        font-size: 13px;
+        font-weight: 600;
+        color: var(--kawaii-text-dark);
         line-height: 1.4;
+        font-family: 'Nunito', sans-serif;
     }
 
     .bubble-tail {
         position: absolute;
-        bottom: -10px;
+        bottom: -15px;
         left: 20px;
         width: 0;
         height: 0;
-        border-left: 8px solid transparent;
-        border-right: 8px solid transparent;
-        border-top: 10px solid #fff;
+        border-left: 15px solid transparent;
+        border-right: 15px solid transparent;
+        border-top: 15px solid var(--kawaii-soft-pink);
+    }
+
+    .bubble-tail::after {
+        content: '';
+        position: absolute;
+        bottom: 3px;
+        left: -12px;
+        width: 0;
+        height: 0;
+        border-left: 12px solid transparent;
+        border-right: 12px solid transparent;
+        border-top: 12px solid var(--kawaii-white);
     }
 
     /** Hamburger menu styles **/
     .hamburger-menu {
-        position: absolute;
+        position: fixed;
         top: 1rem;
         right: 1rem;
         display: flex;
-        flex-direction: column;
-        justify-content: space-around;
-        width: 58px;
-        height: 33px;
-        background: transparent;
-        border: none;
+        align-items: center;
+        justify-content: center;
+        width: 80px;
+        height: 80px;
+        background: linear-gradient(135deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));
+        border: 3px solid var(--kawaii-white);
+        border-radius: 50%;
         cursor: pointer;
-        padding: 0;
         z-index: 1001;
+        box-shadow: 0 4px 15px var(--kawaii-shadow);
+        transition: all 0.3s ease;
+        animation: gentleFloat 3s ease-in-out infinite;
+        font-family: 'Nunito', sans-serif;
+        font-weight: 800;
+        font-size: 1.2em;
+        color: var(--kawaii-white);
+        text-shadow: 1px 1px 2px var(--kawaii-shadow);
     }
 
-    .hamburger-menu div {
-        width: 2rem;
-        height: 0.25rem;
-        background: #0f0f0f;
-        border-radius: 10px;
-        transition: all 0.3s linear;
-        position: relative;
-        transform-origin: 1px;
+    .hamburger-menu:hover {
+        transform: translateY(-3px) scale(1.1);
+        box-shadow: 0 8px 25px var(--kawaii-shadow);
     }
 
     .drawer-container {
@@ -399,42 +427,257 @@
         top: 0;
         right: 0;
         height: 100%;
-        width: 250px;
-        background: #f6f6f6;
-        box-shadow: -2px 0 5px rgba(0, 0, 0, 0.5);
-        padding: 20px;
+        width: 280px;
+        background: linear-gradient(135deg, var(--kawaii-white) 0%, var(--kawaii-light-pink) 50%, var(--kawaii-soft-pink) 100%);
+        border: 3px solid var(--kawaii-bright-pink);
+        border-right: none;
+        border-radius: 20px 0 0 20px;
+        box-shadow: -5px 0 25px var(--kawaii-shadow);
+        padding: 30px;
         z-index: 1001;
         display: flex;
-        /*justify-content: center;*/
         align-items: center;
         flex-direction: column;
-        gap: 1rem;
+        gap: 2rem;
+        animation: gentleFloat 4s ease-in-out infinite;
     }
 
-    @media (prefers-color-scheme: dark) {
-        .hamburger-menu div {
-            background: #f6f6f6;
-        }
+    .drawer::before {
+        content: '🌟';
+        position: absolute;
+        top: 20px;
+        left: 20px;
+        font-size: 1.5em;
+        animation: sparkle 2s ease-in-out infinite;
+    }
 
-        .drawer {
-            background: #2f2f2f;
-        }
+    .drawer label {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 700;
+        color: var(--kawaii-text-dark);
+        font-size: 1.1em;
+        text-align: center;
+    }
+
+    .drawer hr {
+        border: none;
+        height: 3px;
+        background: linear-gradient(90deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));
+        border-radius: 5px;
+        width: 100%;
+        margin: 1rem 0;
+    }
+
+    /* Button and input styling */
+    input,
+    button {
+        border-radius: 20px;
+        border: 3px solid var(--kawaii-bright-pink);
+        padding: 0.8em 1.5em;
+        font-size: 1.1em;
+        font-weight: 700;
+        font-family: 'Nunito', sans-serif;
+        color: var(--kawaii-white);
+        background: linear-gradient(135deg, var(--kawaii-hot-pink) 0%, var(--kawaii-bright-pink) 100%);
+        transition: all 0.3s ease;
+        box-shadow: 0 4px 15px var(--kawaii-shadow);
+        position: relative;
+        overflow: hidden;
+    }
+
+    button {
+        cursor: pointer;
+        transform: translateY(0);
+    }
+
+    button::before {
+        content: '';
+        position: absolute;
+        top: 0;
+        left: -100%;
+        width: 100%;
+        height: 100%;
+        background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.4), transparent);
+        transition: left 0.5s;
+    }
+
+    button:hover {
+        border-color: var(--kawaii-hot-pink);
+        transform: translateY(-3px);
+        box-shadow: 0 8px 25px var(--kawaii-shadow);
+        animation: gentleFloat 2s ease-in-out infinite;
+    }
+
+    button:hover::before {
+        left: 100%;
+    }
+
+    button:active {
+        transform: translateY(-1px);
+        box-shadow: 0 4px 15px var(--kawaii-shadow);
+    }
+
+    input {
+        color: var(--kawaii-text-dark);
+        background: var(--kawaii-white);
+        border-color: var(--kawaii-soft-pink);
+    }
+
+    input:focus {
+        outline: none;
+        border-color: var(--kawaii-hot-pink);
+        box-shadow: 0 0 0 3px rgba(255, 20, 147, 0.2);
+    }
+
+    /* Paragraph styling */
+    p {
+        font-family: 'Nunito', sans-serif;
+        font-weight: 600;
+        color: var(--kawaii-text-dark);
+        font-size: 1.1em;
+        margin: 1rem 0;
+    }
+
+    /* Row container */
+    .row {
+        display: flex;
+        justify-content: center;
+        margin: 1.5rem 0;
+    }
+
+    /*@media (prefers-color-scheme: dark) {*/
+    /*    :root {*/
+    /*        color: var(--kawaii-white);*/
+    /*        background: linear-gradient(135deg, #2D1B69 0%, #8B008B 50%, var(--kawaii-hot-pink) 100%);*/
+    /*    }*/
+
+    /*    .hamburger-menu div {*/
+    /*        background: var(--kawaii-white);*/
+    /*    }*/
+
+    /*    .drawer {*/
+    /*        background: linear-gradient(135deg, #4A0E4E 0%, #8B008B 50%, var(--kawaii-hot-pink) 100%);*/
+    /*        color: var(--kawaii-white);*/
+    /*    }*/
+
+    /*    .drawer label {*/
+    /*        color: var(--kawaii-white);*/
+    /*    }*/
+
+    /*    .view-switcher button {*/
+    /*        border-color: var(--kawaii-bright-pink);*/
+    /*    }*/
+
+    /*    .view-switcher button.active {*/
+    /*        border-color: var(--kawaii-hot-pink);*/
+    /*        background: linear-gradient(135deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));*/
+    /*    }*/
+
+    /*    .metadata-table th,*/
+    /*    .metadata-table td {*/
+    /*        border: 1px solid var(--kawaii-bright-pink);*/
+    /*    }*/
+
+    /*    .metadata-table th {*/
+    /*        background: linear-gradient(135deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));*/
+    /*    }*/
+
+    /*    a:hover {*/
+    /*        color: var(--kawaii-bright-pink);*/
+    /*    }*/
+
+    /*    input {*/
+    /*        color: var(--kawaii-text-dark);*/
+    /*        background: var(--kawaii-white);*/
+    /*        border-color: var(--kawaii-bright-pink);*/
+    /*    }*/
+
+    /*    .speech-bubble {*/
+    /*        background: linear-gradient(135deg, var(--kawaii-white) 0%, var(--kawaii-pastel-pink) 100%);*/
+    /*        border-color: var(--kawaii-bright-pink);*/
+    /*    }*/
+
+    /*    p {*/
+    /*        color: var(--kawaii-white);*/
+    /*    }*/
+
+    /*    h1 {*/
+    /*        background: linear-gradient(45deg, var(--kawaii-white), var(--kawaii-pastel-pink));*/
+    /*        -webkit-background-clip: text;*/
+    /*        -webkit-text-fill-color: transparent;*/
+    /*        background-clip: text;*/
+    /*        line-height: 2;*/
+    /*        padding: 0.5rem 0;*/
+    /*    }*/
+    /*}*/
+
+    @font-face {
+        font-family: 'Nunito';
+        src: url('/fonts/nunito-regular.woff2') format('woff2');
+        font-weight: 400;
+        font-display: swap;
     }
 
     :root {
-        font-family: Inter, Avenir, Helvetica, Arial, sans-serif;
+        /* Kawaii Pink Color Palette */
+        --kawaii-hot-pink: #FF1493;
+        --kawaii-bright-pink: #FF69B4;
+        --kawaii-soft-pink: #FFB6C1;
+        --kawaii-pastel-pink: #FFC0CB;
+        --kawaii-light-pink: #FFCCCB;
+        --kawaii-cream: #FFF8DC;
+        --kawaii-white: #FFFAFA;
+        --kawaii-shadow: rgba(255, 20, 147, 0.3);
+        --kawaii-text-dark: #4A0E4E;
+        --kawaii-text-light: #8B008B;
+
+        font-family: 'Nunito', 'Comic Neue', Inter, Avenir, Helvetica, Arial, sans-serif;
         font-size: 16px;
         line-height: 24px;
-        font-weight: 400;
+        font-weight: 600;
 
-        color: #0f0f0f;
-        background-color: #f6f6f6;
+        color: var(--kawaii-text-dark);
+        background: linear-gradient(135deg, var(--kawaii-cream) 0%, var(--kawaii-light-pink) 50%, var(--kawaii-soft-pink) 100%);
+        min-height: 100vh;
 
         font-synthesis: none;
         text-rendering: optimizeLegibility;
         -webkit-font-smoothing: antialiased;
         -moz-osx-font-smoothing: grayscale;
         -webkit-text-size-adjust: 100%;
+
+        overflow-x: hidden;
+        width: 100%;
+    }
+
+    /* Kawaii floating animations */
+    @keyframes gentleFloat {
+        0%, 100% {
+            transform: translateY(0px);
+        }
+        50% {
+            transform: translateY(-8px);
+        }
+    }
+
+    @keyframes sparkle {
+        0%, 100% {
+            opacity: 0.4;
+            transform: scale(1);
+        }
+        50% {
+            opacity: 1;
+            transform: scale(1.2);
+        }
+    }
+
+    @keyframes heartbeat {
+        0%, 100% {
+            transform: scale(1);
+        }
+        50% {
+            transform: scale(1.05);
+        }
     }
 
     .container {
@@ -444,6 +687,38 @@
         flex-direction: column;
         justify-content: center;
         text-align: center;
+    }
+
+    h1 {
+        text-align: center;
+        font-family: 'Nunito', sans-serif;
+        font-weight: 800;
+        font-size: 2.5rem;
+        background: linear-gradient(45deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));
+        line-height: 5rem;
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        background-clip: text;
+        text-shadow: 2px 2px 4px var(--kawaii-shadow);
+        margin: 2rem 0;
+        animation: gentleFloat 4s ease-in-out infinite;
+        position: relative;
+    }
+
+    h1::before {
+        content: '✨';
+        position: absolute;
+        left: -2rem;
+        top: 0;
+        animation: sparkle 2s ease-in-out infinite;
+    }
+
+    h1::after {
+        content: '💖';
+        position: absolute;
+        right: -2rem;
+        top: 0;
+        animation: heartbeat 1.5s ease-in-out infinite;
     }
 
     /*.logo {*/
@@ -457,26 +732,45 @@
     /*    filter: drop-shadow(0 0 2em #24c8db);*/
     /*}*/
 
-    .row {
-        display: flex;
-        justify-content: center;
-    }
 
     .view-switcher {
         display: flex;
         justify-content: center;
         margin-bottom: 2rem;
-        gap: 0.5rem;
+        gap: 1rem;
+        animation: gentleFloat 2s ease-in-out infinite;
     }
 
     .view-switcher button {
-        background-color: transparent;
-        border: 1px solid #ccc;
+        background: linear-gradient(135deg, var(--kawaii-white), var(--kawaii-light-pink));
+        border: 3px solid var(--kawaii-bright-pink);
+        color: var(--kawaii-text-dark);
+        font-family: 'Nunito', sans-serif;
+        font-weight: 700;
+        position: relative;
+        overflow: hidden;
     }
 
     .view-switcher button.active {
-        border-color: #396cd8;
-        background-color: #e8e8e8;
+        border-color: var(--kawaii-hot-pink);
+        background: linear-gradient(135deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));
+        color: var(--kawaii-white);
+        box-shadow: 0 4px 15px var(--kawaii-shadow);
+    }
+
+    .view-switcher button::after {
+        content: '✨';
+        position: absolute;
+        top: -5px;
+        right: -5px;
+        font-size: 0.8em;
+        opacity: 0;
+        transition: opacity 0.3s ease;
+    }
+
+    .view-switcher button.active::after {
+        opacity: 1;
+        animation: sparkle 1s ease-in-out infinite;
     }
 
     .metadata-table {
@@ -484,6 +778,10 @@
         border-collapse: collapse;
         width: 80%;
         max-width: 600px;
+        border-radius: 15px;
+        overflow: hidden;
+        box-shadow: 0 8px 25px var(--kawaii-shadow);
+        border: 3px solid var(--kawaii-bright-pink);
     }
 
     .metadata-table th,
@@ -494,95 +792,133 @@
     }
 
     .metadata-table th {
-        background-color: #f2f2f2;
+        background: linear-gradient(135deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));
+        color: var(--kawaii-white);
+        font-family: 'Nunito', sans-serif;
+        font-weight: 700;
+        padding: 12px;
     }
 
-    a {
+    .metadata-table td {
+        background: var(--kawaii-white);
+        color: var(--kawaii-text-dark);
+        font-family: 'Nunito', sans-serif;
         font-weight: 500;
-        color: #646cff;
-        text-decoration: inherit;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--kawaii-light-pink);
+    }
+
+    .metadata-table td:first-child {
+        white-space: nowrap;
+    }
+
+    .metadata-table td:last-child {
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+
+    /* Link styling */
+    a {
+        font-weight: 600;
+        color: var(--kawaii-hot-pink);
+        text-decoration: none;
+        position: relative;
+    }
+
+    a::after {
+        content: '';
+        position: absolute;
+        width: 0;
+        height: 2px;
+        bottom: -2px;
+        left: 50%;
+        background: linear-gradient(90deg, var(--kawaii-hot-pink), var(--kawaii-bright-pink));
+        transition: all 0.3s ease;
+    }
+
+    a:hover::after {
+        width: 100%;
+        left: 0;
     }
 
     a:hover {
-        color: #535bf2;
+        color: var(--kawaii-bright-pink);
+        transform: translateY(-1px);
+        transition: all 0.3s ease;
     }
 
-    h1 {
-        text-align: center;
+    /* Kawaii decorative elements */
+    body::before,
+    body::after {
+        content: '';
+        position: fixed;
+        pointer-events: none;
+        z-index: -1;
     }
 
-    input,
-    button {
-        border-radius: 8px;
-        border: 1px solid transparent;
-        padding: 0.6em 1.2em;
-        font-size: 1em;
-        font-weight: 500;
-        font-family: inherit;
-        color: #0f0f0f;
-        background-color: #ffffff;
-        transition: border-color 0.25s;
-        box-shadow: 0 2px 2px rgba(0, 0, 0, 0.2);
+    /* Floating hearts */
+    .container::before {
+        content: '💖';
+        position: fixed;
+        top: 10%;
+        right: 15%;
+        font-size: 2rem;
+        animation: gentleFloat 6s ease-in-out infinite;
+        z-index: 1;
+        pointer-events: none;
     }
 
-    button {
-        cursor: pointer;
+    .container::after {
+        content: '🌸';
+        position: fixed;
+        bottom: 20%;
+        right: 10%;
+        font-size: 1.5rem;
+        animation: sparkle 4s ease-in-out infinite;
+        z-index: 1;
+        pointer-events: none;
     }
 
-    button:hover {
-        border-color: #396cd8;
+    /* Kawaii stars scattered around */
+    @keyframes floatingStar {
+        0%, 100% {
+            transform: translateY(0) rotate(0deg);
+            opacity: 0.6;
+        }
+        50% {
+            transform: translateY(-15px) rotate(180deg);
+            opacity: 1;
+        }
     }
 
-    button:active {
-        border-color: #396cd8;
-        background-color: #e8e8e8;
+    /* Additional kawaii element positioning */
+    .kawaii-star-1 {
+        position: fixed;
+        top: 25%;
+        left: 8%;
+        font-size: 1.2rem;
+        animation: floatingStar 8s ease-in-out infinite;
+        z-index: 1;
+        pointer-events: none;
     }
 
-    input,
-    button {
-        outline: none;
+    .kawaii-star-2 {
+        position: fixed;
+        top: 70%;
+        right: 25%;
+        font-size: 1rem;
+        animation: sparkle 5s ease-in-out infinite 2s;
+        z-index: 1;
+        pointer-events: none;
     }
 
-    /*#greet-input {*/
-    /*    margin-right: 5px;*/
-    /*}*/
-
-    /*@media (prefers-color-scheme: dark) {*/
-    /*    :root {*/
-    /*        color: #f6f6f6;*/
-    /*        background-color: #2f2f2f;*/
-    /*    }*/
-
-    /*    .view-switcher button {*/
-    /*        border-color: #555;*/
-    /*    }*/
-
-    /*    .view-switcher button.active {*/
-    /*        border-color: #24c8db;*/
-    /*        background-color: #0f0f0f69;*/
-    /*    }*/
-
-    /*    .metadata-table th,*/
-    /*    .metadata-table td {*/
-    /*        border: 1px solid #444;*/
-    /*    }*/
-
-    /*    .metadata-table th {*/
-    /*        background-color: #3a3a3a;*/
-    /*    }*/
-
-    /*    a:hover {*/
-    /*        color: #24c8db;*/
-    /*    }*/
-
-    /*    input,*/
-    /*    button {*/
-    /*        color: #ffffff;*/
-    /*        background-color: #0f0f0f98;*/
-    /*    }*/
-
-    /*    button:active {*/
-    /*        background-color: #0f0f0f69;*/
-    /*    }*/
-    /*}*/
+    .kawaii-star-3 {
+        position: fixed;
+        top: 15%;
+        left: 85%;
+        font-size: 0.8rem;
+        animation: gentleFloat 7s ease-in-out infinite 1s;
+        z-index: 1;
+        pointer-events: none;
+    }
 </style>

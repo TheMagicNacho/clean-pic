@@ -138,7 +138,7 @@ async fn make_write_dir(path: &PathBuf, new_dir: &str) -> Result<PathBuf, Error>
     let mut new_path = path.clone();
 
     new_path.push(new_dir);
-    println!("Creating new directory at {:?}", new_path);
+    // println!("Creating new directory at {:?}", new_path);
     match tokio::fs::create_dir(&new_path).await {
         Ok(_) => Ok(new_path),
         Err(e) => {
@@ -263,12 +263,12 @@ async fn scrub_images(path: &str, save_directory: &str) -> Result<String, ()> {
     };
 
     let save_directory = make_write_dir(&path, save_directory).await.unwrap();
-    println!("Saving scrubbed image to {:?}", save_directory);
+    // println!("Saving scrubbed image to {:?}", save_directory);
     let mut stats = BatchStats::new();
 
     let files = gather_files(&path).await;
     for file in files {
-        println!("Processing file: {}", &file);
+        // println!("Processing file: {}", &file);
 
         let data = std::fs::read(&file).unwrap();
         match guess_format(&data).unwrap() {
@@ -290,7 +290,7 @@ async fn scrub_images(path: &str, save_directory: &str) -> Result<String, ()> {
 
 #[tauri::command]
 fn count_images(path: &str) -> u64 {
-    println!("Counting image files in {}", path);
+    // println!("Counting image files in {}", path);
     let mut counter: u64 = 0;
     match std::fs::read_dir(path) {
         Ok(entries) => {
