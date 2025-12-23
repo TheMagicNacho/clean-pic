@@ -3,6 +3,7 @@
     import {open} from "@tauri-apps/plugin-dialog";
     import {openPath} from "@tauri-apps/plugin-opener";
     import {fly} from "svelte/transition";
+    import KawaiBear from "$lib/components/KawaiBear.svelte";
 
     let folderPath = $state("");
     let numberOfFiles = $state(-1);
@@ -17,6 +18,22 @@
     let imagePath = $state("");
     let imageMetadata = $state<Record<string, string> | null>(null);
     let inspecting = $state(false);
+
+    // Bear state management
+    type BearState = "waiting" | "talking" | "looking";
+    let bearState: BearState = $state("waiting");
+    let bearMessage = $state("");
+
+    function setBearState(state: BearState, message: string = "", duration: number = 3000) {
+        bearState = state;
+        bearMessage = message;
+        if (state !== "waiting" && duration > 0) {
+            setTimeout(() => {
+                bearState = "waiting";
+                bearMessage = "";
+            }, duration);
+        }
+    }
 
     function openDrawer() {
         isDrawerOpen = true;
@@ -38,6 +55,7 @@
     async function scrubDirectory(event: Event) {
         event.preventDefault();
         thinking = true;
+        setBearState("talking", "Scrubbing your images! ✨", 0);
         console.log("Scrubbing folder:", folderPath);
         const result = String(
             await invoke("scrub_images", {
@@ -47,6 +65,7 @@
         );
         console.log("Scrub result:", result);
         thinking = false;
+        setBearState("talking", "All done! Squeaky clean! 🧼", 4000);
         await openPath(result);
         cleanPath = result;
     }
@@ -54,6 +73,7 @@
     async function selectFolder(event: Event) {
         event.preventDefault();
         thinking = true;
+        setBearState("looking", "Looking for images... 🔍", 0);
         const selected = await open({
             directory: true,
             multiple: false,
@@ -63,8 +83,14 @@
             folderPath = selected;
             console.log("Selected folder:", folderPath);
             numberOfFiles = await invoke("count_images", {path: folderPath});
+            if (numberOfFiles > 0) {
+                setBearState("talking", `Found ${numberOfFiles} images! 📸`, 3000);
+            } else {
+                setBearState("talking", "No images found here 😅", 3000);
+            }
         } else {
             console.log("No folder selected");
+            setBearState("waiting", "");
         }
         thinking = false;
     }
@@ -84,6 +110,7 @@
         event.preventDefault();
         inspecting = true;
         imageMetadata = null;
+        setBearState("looking", "Inspecting image... 🧐", 0);
         const selected = await open({
             directory: false,
             multiple: false,
@@ -96,8 +123,10 @@
             const metadata = await invoke("inspect_image", {path: imagePath});
             console.log(`metadata: ${metadata}`);
             imageMetadata = createImageMetadataObject(metadata as [string, string][]);
+            setBearState("talking", "Here's what I found! 📋", 3000);
         } else {
             console.log("No image selected");
+            setBearState("waiting", "");
         }
         inspecting = false;
     }
@@ -223,6 +252,8 @@
             {/if}
         </div>
     {/if}
+
+    <KawaiBear message={bearMessage} state={bearState}/>
 </main>
 
 <style>
