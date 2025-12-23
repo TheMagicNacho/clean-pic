@@ -1,6 +1,6 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "clean-pic",
+  "productName": "0w0 Scrubby Buddy",
   "version": "0.1.0",
   "identifier": "com.themagicnacho.clean-pic",
   "build": {
@@ -12,9 +12,12 @@
   "app": {
     "windows": [
       {
-        "title": "clean-pic",
+        "title": "0w0 Scrubby Buddy",
         "width": 800,
-        "height": 600
+        "height": 600,
+        "minHeight": 500,
+        "minWidth": 700
+
       }
     ],
     "security": {

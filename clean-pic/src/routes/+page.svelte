@@ -37,12 +37,19 @@
 
     // Button hover descriptions
     const buttonDescriptions: Record<string, string> = {
-        "select-folder": "I'll scrub all the images in the directory you choose, then save the cleaned images in a folder for you! 📁",
-        "scrub": "Let's clean those images! I'll remove all metadata and make them squeaky clean! 🧹✨",
-        "reset": "This will clear everything and start fresh! 🔄",
-        "select-image": "Pick an image and I'll show you all the hidden metadata inside! 🔍",
-        "scrub-view": "Switch to scrub mode to clean metadata from your images! 🧼",
-        "inspect-view": "Switch to inspect mode to peek at image metadata! 👀",
+        "select-folder": "I'll scrub all the images in the directory you choose, then save the cleaned images in a folder for you! The original images will be left unchanged.",
+        "scrub": "Let's clean those images! I'll remove all metadata and make them squeaky clean! You can change the folder name I save to by clicking on the hamburger menu in the top right!",
+        "reset": "This will wash away everything and start fresh!",
+        "select-image": "Pick an image and I'll show you all the hidden metadata inside! Even clean files have a small amount of data to help tell devices how to render the image. The question is if you are ok with the data I find!",
+        "scrub-view": "Switch to scrub mode to scrub out all that pesky metadata from your images!",
+        "inspect-view": "Let's switch to inspect mode and take a peek at that sweet sweet image data!",
+    };
+    const reactionScript: Record<string, string> = {
+        "scrubbing": "Please wait, I'm scrubbing as fast as I can!",
+        "all-done": "All done! Squeaky clean, daddy! ",
+        "found": "Here are all the images I could find in the folder you gave me.",
+        "no-find": "I'm sorry, daddy! I couldn't find any images for you.",
+        "thinking": "hummmmm...",
     };
 
     function onButtonHover(buttonId: string) {
@@ -78,7 +85,7 @@
     async function scrubDirectory(event: Event) {
         event.preventDefault();
         thinking = true;
-        setBearState("talking", "Scrubbing your images! ✨", 0);
+        setBearState("talking", reactionScript["scrubbing"], 8000);
         console.log("Scrubbing folder:", folderPath);
         const result = String(
             await invoke("scrub_images", {
@@ -88,7 +95,7 @@
         );
         console.log("Scrub result:", result);
         thinking = false;
-        setBearState("talking", "All done! Squeaky clean! 🧼", 4000);
+        setBearState("talking", reactionScript["all-done"], 8000);
         await openPath(result);
         cleanPath = result;
     }
@@ -96,7 +103,7 @@
     async function selectFolder(event: Event) {
         event.preventDefault();
         thinking = true;
-        setBearState("looking", "Looking for images... 🔍", 0);
+        // setBearState("looking", "I'm looking for your images", 0);
         const selected = await open({
             directory: true,
             multiple: false,
@@ -107,9 +114,9 @@
             console.log("Selected folder:", folderPath);
             numberOfFiles = await invoke("count_images", {path: folderPath});
             if (numberOfFiles > 0) {
-                setBearState("talking", `Found ${numberOfFiles} images! 📸`, 3000);
+                setBearState("talking", reactionScript["found"], 8000);
             } else {
-                setBearState("talking", "No images found here 😅", 3000);
+                setBearState("talking", reactionScript["no-find"], 8000);
             }
         } else {
             console.log("No folder selected");
@@ -133,7 +140,7 @@
         event.preventDefault();
         inspecting = true;
         imageMetadata = null;
-        setBearState("looking", "Inspecting image... 🧐", 0);
+        setBearState("looking", reactionScript["thinking"], 3000);
         const selected = await open({
             directory: false,
             multiple: false,
@@ -146,7 +153,7 @@
             const metadata = await invoke("inspect_image", {path: imagePath});
             console.log(`metadata: ${metadata}`);
             imageMetadata = createImageMetadataObject(metadata as [string, string][]);
-            setBearState("talking", "Here's what I found! 📋", 3000);
+            setBearState("talking", "Look, daddy! Here's what I found for you! 📋", 8000);
         } else {
             console.log("No image selected");
             setBearState("waiting", "");
@@ -154,20 +161,6 @@
         inspecting = false;
     }
 </script>
-
-{#if !isDrawerOpen}
-    <div
-            class="hamburger-menu"
-            onclick={openDrawer}
-            onkeydown={() => {}}
-            role="button"
-            tabindex="0"
-    >
-        <div></div>
-        <div></div>
-        <div></div>
-    </div>
-{/if}
 
 {#if isDrawerOpen}
     <div
@@ -198,6 +191,19 @@
 
 <main class="container">
     <h1>0w0 scrubby buddy</h1>
+    {#if !isDrawerOpen}
+        <div
+                class="hamburger-menu"
+                onclick={openDrawer}
+                onkeydown={() => {}}
+                role="button"
+                tabindex="0"
+        >
+            <div></div>
+            <div></div>
+            <div></div>
+        </div>
+    {/if}
 
     <div class="view-switcher">
         <button
@@ -295,17 +301,31 @@
             {/if}
         </div>
     {/if}
-    {#if bearMessage && bearState === "talking"}
-        <div class="speech-bubble" transition:fly={{ y: 10, duration: 200 }}>
-            <p>{bearMessage}</p>
-            <div class="bubble-tail"></div>
-        </div>
-    {/if}
 
-    <KawaiBear message={bearMessage} state={bearState}/>
+    <div class="bear">
+
+        {#if bearMessage && bearState === "talking"}
+            <div class="speech-bubble" transition:fly={{ y: 10, duration: 200 }}>
+                <p>{bearMessage}</p>
+                <div class="bubble-tail"></div>
+            </div>
+        {/if}
+        <KawaiBear message={bearMessage} state={bearState}/>
+    </div>
 </main>
 
+
 <style>
+
+    /** Bear container styles **/
+    .bear {
+        position: absolute;
+        bottom: 1.5rem;
+        left: 1.5rem;
+        width: 200px;
+
+    }
+
     /** Speech bubble styles **/
     .speech-bubble {
         background: #fff;
@@ -314,7 +334,8 @@
         max-width: 180px;
         box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
         position: absolute;
-        bottom: 150px;
+        bottom: 8rem;
+        left: 1.5rem;
         order: 2;
     }
 
@@ -336,23 +357,16 @@
         border-top: 10px solid #fff;
     }
 
-    /*.logo.vite:hover {*/
-    /*    filter: drop-shadow(0 0 2em #747bff);*/
-    /*}*/
-
-    /*.logo.svelte-kit:hover {*/
-    /*    filter: drop-shadow(0 0 2em #ff3e00);*/
-    /*}*/
-
+    /** Hamburger menu styles **/
     .hamburger-menu {
         position: absolute;
-        top: 1.5rem;
-        right: 1.5rem;
+        top: 1rem;
+        right: 1rem;
         display: flex;
         flex-direction: column;
         justify-content: space-around;
-        width: 2rem;
-        height: 2rem;
+        width: 58px;
+        height: 33px;
         background: transparent;
         border: none;
         cursor: pointer;
@@ -432,16 +446,16 @@
         text-align: center;
     }
 
-    .logo {
-        height: 6em;
-        padding: 1.5em;
-        will-change: filter;
-        transition: 0.75s;
-    }
+    /*.logo {*/
+    /*    height: 6em;*/
+    /*    padding: 1.5em;*/
+    /*    will-change: filter;*/
+    /*    transition: 0.75s;*/
+    /*}*/
 
-    .logo.tauri:hover {
-        filter: drop-shadow(0 0 2em #24c8db);
-    }
+    /*.logo.tauri:hover {*/
+    /*    filter: drop-shadow(0 0 2em #24c8db);*/
+    /*}*/
 
     .row {
         display: flex;
@@ -529,46 +543,46 @@
         outline: none;
     }
 
-    #greet-input {
-        margin-right: 5px;
-    }
+    /*#greet-input {*/
+    /*    margin-right: 5px;*/
+    /*}*/
 
-    @media (prefers-color-scheme: dark) {
-        :root {
-            color: #f6f6f6;
-            background-color: #2f2f2f;
-        }
+    /*@media (prefers-color-scheme: dark) {*/
+    /*    :root {*/
+    /*        color: #f6f6f6;*/
+    /*        background-color: #2f2f2f;*/
+    /*    }*/
 
-        .view-switcher button {
-            border-color: #555;
-        }
+    /*    .view-switcher button {*/
+    /*        border-color: #555;*/
+    /*    }*/
 
-        .view-switcher button.active {
-            border-color: #24c8db;
-            background-color: #0f0f0f69;
-        }
+    /*    .view-switcher button.active {*/
+    /*        border-color: #24c8db;*/
+    /*        background-color: #0f0f0f69;*/
+    /*    }*/
 
-        .metadata-table th,
-        .metadata-table td {
-            border: 1px solid #444;
-        }
+    /*    .metadata-table th,*/
+    /*    .metadata-table td {*/
+    /*        border: 1px solid #444;*/
+    /*    }*/
 
-        .metadata-table th {
-            background-color: #3a3a3a;
-        }
+    /*    .metadata-table th {*/
+    /*        background-color: #3a3a3a;*/
+    /*    }*/
 
-        a:hover {
-            color: #24c8db;
-        }
+    /*    a:hover {*/
+    /*        color: #24c8db;*/
+    /*    }*/
 
-        input,
-        button {
-            color: #ffffff;
-            background-color: #0f0f0f98;
-        }
+    /*    input,*/
+    /*    button {*/
+    /*        color: #ffffff;*/
+    /*        background-color: #0f0f0f98;*/
+    /*    }*/
 
-        button:active {
-            background-color: #0f0f0f69;
-        }
-    }
+    /*    button:active {*/
+    /*        background-color: #0f0f0f69;*/
+    /*    }*/
+    /*}*/
 </style>
