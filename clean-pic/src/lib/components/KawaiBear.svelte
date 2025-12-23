@@ -1,5 +1,4 @@
 <script lang="ts">
-    import {fly} from "svelte/transition";
 
     type BearState = "waiting" | "talking" | "looking";
 
@@ -12,12 +11,6 @@
 </script>
 
 <div class="bear-container">
-    {#if message && state === "talking"}
-        <div class="speech-bubble" transition:fly={{ y: 10, duration: 200 }}>
-            <p>{message}</p>
-            <div class="bubble-tail"></div>
-        </div>
-    {/if}
 
     <div class="bear" class:looking={state === "looking"} class:talking={state === "talking"}
          class:waiting={state === "waiting"}>
@@ -77,34 +70,6 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-    }
-
-    .speech-bubble {
-        background: #fff;
-        border-radius: 12px;
-        padding: 10px 14px;
-        margin-bottom: 10px;
-        max-width: 180px;
-        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
-        position: relative;
-    }
-
-    .speech-bubble p {
-        margin: 0;
-        font-size: 12px;
-        color: #333;
-        line-height: 1.4;
-    }
-
-    .bubble-tail {
-        position: absolute;
-        bottom: -8px;
-        left: 20px;
-        width: 0;
-        height: 0;
-        border-left: 8px solid transparent;
-        border-right: 8px solid transparent;
-        border-top: 10px solid #fff;
     }
 
     .bear {

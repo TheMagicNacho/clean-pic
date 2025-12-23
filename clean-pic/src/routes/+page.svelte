@@ -35,6 +35,29 @@
         }
     }
 
+    // Button hover descriptions
+    const buttonDescriptions: Record<string, string> = {
+        "select-folder": "I'll scrub all the images in the directory you choose, then save the cleaned images in a folder for you! 📁",
+        "scrub": "Let's clean those images! I'll remove all metadata and make them squeaky clean! 🧹✨",
+        "reset": "This will clear everything and start fresh! 🔄",
+        "select-image": "Pick an image and I'll show you all the hidden metadata inside! 🔍",
+        "scrub-view": "Switch to scrub mode to clean metadata from your images! 🧼",
+        "inspect-view": "Switch to inspect mode to peek at image metadata! 👀",
+    };
+
+    function onButtonHover(buttonId: string) {
+        const description = buttonDescriptions[buttonId];
+        if (description) {
+            bearState = "talking";
+            bearMessage = description;
+        }
+    }
+
+    function onButtonLeave() {
+        bearState = "waiting";
+        bearMessage = "";
+    }
+
     function openDrawer() {
         isDrawerOpen = true;
     }
@@ -179,12 +202,16 @@
     <div class="view-switcher">
         <button
                 class:active={activeView === "scrub"}
-                onclick={() => (activeView = "scrub")}>Scrub
+                onclick={() => (activeView = "scrub")}
+                onmouseenter={() => onButtonHover("scrub-view")}
+                onmouseleave={onButtonLeave}>Scrub
         </button
         >
         <button
                 class:active={activeView === "inspect"}
-                onclick={() => (activeView = "inspect")}>Inspect
+                onclick={() => (activeView = "inspect")}
+                onmouseenter={() => onButtonHover("inspect-view")}
+                onmouseleave={onButtonLeave}>Inspect
         </button
         >
     </div>
@@ -193,7 +220,11 @@
     {#if activeView === "scrub"}
         <div transition:fly={{ x: -200, duration: 300 }}>
             <form class="row" onsubmit={selectFolder}>
-                <button type="submit">Select Folder</button>
+                <button
+                        type="submit"
+                        onmouseenter={() => onButtonHover("select-folder")}
+                        onmouseleave={onButtonLeave}>Select Folder
+                </button>
             </form>
 
             {#if folderPath}
@@ -207,14 +238,22 @@
                 {#if numberOfFiles > 0}
                     <p>Number of images found: {numberOfFiles}</p>
                     <form class="row" onsubmit={scrubDirectory}>
-                        <button type="submit">Scrub Me Daddy</button>
+                        <button
+                                type="submit"
+                                onmouseenter={() => onButtonHover("scrub")}
+                                onmouseleave={onButtonLeave}>Scrub Me Daddy
+                        </button>
                     </form>
                 {/if}
             {/if}
             {#if cleanPath}
                 <p>I'm all squeaky clean: {cleanPath}</p>
                 <form class="row" onsubmit={resetState}>
-                    <button type="submit">Reset</button>
+                    <button
+                            type="submit"
+                            onmouseenter={() => onButtonHover("reset")}
+                            onmouseleave={onButtonLeave}>Reset
+                    </button>
                 </form>
             {/if}
         </div>
@@ -224,7 +263,11 @@
     {#if activeView === "inspect"}
         <div transition:fly={{ x: 200, duration: 300 }}>
             <form class="row" onsubmit={selectImage}>
-                <button type="submit">Select Image</button>
+                <button
+                        type="submit"
+                        onmouseenter={() => onButtonHover("select-image")}
+                        onmouseleave={onButtonLeave}>Select Image
+                </button>
             </form>
 
             {#if inspecting}
@@ -252,18 +295,54 @@
             {/if}
         </div>
     {/if}
+    {#if bearMessage && bearState === "talking"}
+        <div class="speech-bubble" transition:fly={{ y: 10, duration: 200 }}>
+            <p>{bearMessage}</p>
+            <div class="bubble-tail"></div>
+        </div>
+    {/if}
 
     <KawaiBear message={bearMessage} state={bearState}/>
 </main>
 
 <style>
-    .logo.vite:hover {
-        filter: drop-shadow(0 0 2em #747bff);
+    /** Speech bubble styles **/
+    .speech-bubble {
+        background: #fff;
+        border-radius: 12px;
+        padding: 10px 14px;
+        max-width: 180px;
+        box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+        position: absolute;
+        bottom: 150px;
+        order: 2;
     }
 
-    .logo.svelte-kit:hover {
-        filter: drop-shadow(0 0 2em #ff3e00);
+    .speech-bubble p {
+        margin: 0;
+        font-size: 12px;
+        color: #333;
+        line-height: 1.4;
     }
+
+    .bubble-tail {
+        position: absolute;
+        bottom: -10px;
+        left: 20px;
+        width: 0;
+        height: 0;
+        border-left: 8px solid transparent;
+        border-right: 8px solid transparent;
+        border-top: 10px solid #fff;
+    }
+
+    /*.logo.vite:hover {*/
+    /*    filter: drop-shadow(0 0 2em #747bff);*/
+    /*}*/
+
+    /*.logo.svelte-kit:hover {*/
+    /*    filter: drop-shadow(0 0 2em #ff3e00);*/
+    /*}*/
 
     .hamburger-menu {
         position: absolute;
