@@ -155,9 +155,7 @@ jobs:
         uses: oras-project/setup-oras@v1
 
       - name: Login to GHCR
-        env:
-          ORAS_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: printf '%s' "$ORAS_TOKEN" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+        run: printf '%s' "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
       - name: Publish archive to GitHub Packages
         env:
