@@ -8,8 +8,8 @@ on:
 
 permissions:
   contents: read
-  pages: write
   id-token: write
+  packages: write
 
 env:
   CARGO_TERM_COLOR: always
@@ -44,23 +44,24 @@ jobs:
         run: cargo fmt --all -- --check
 
   sbom:
-    name: SBOM generation
+    name: SBOM generation (CycloneDX)
     needs: format_and_static
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Generate SBOM
+      - name: Generate SBOM (CycloneDX)
         uses: anchore/sbom-action@v0
         with:
-          output-file: sbom.spdx.json
+          format: cyclonedx-json
+          output-file: sbom.cdx.json
 
       - name: Upload SBOM
         uses: actions/upload-artifact@v4
         with:
           name: sbom
-          path: sbom.spdx.json
+          path: sbom.cdx.json
 
   security:
     name: Security analysis
@@ -133,68 +134,31 @@ jobs:
           path: src-tauri/target/release/bundle/**/*
           if-no-files-found: error
 
-  pages:
-    name: Publish installers to GitHub Pages
+  publish-packages:
+    name: Publish installers to GitHub Packages
     needs: build-bundles
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - name: Download bundle artifacts
         uses: actions/download-artifact@v4
         with:
           pattern: tauri-*
           merge-multiple: true
-          path: site/downloads
+          path: downloads
 
-      - name: Generate index
+      - name: Archive installers
         run: |
-          cd site
-          python - <<'PY'
-import html
-import pathlib
+          tar -czf scrubby-buddy-installers.tar.gz -C downloads .
 
-root = pathlib.Path(".")
-downloads = root / "downloads"
-links = []
-for file in sorted(downloads.rglob("*")):
-    if file.is_file():
-        rel = file.relative_to(root)
-        rel_posix = rel.as_posix()
-        links.append(f'<li><a href="{html.escape(rel_posix)}">{html.escape(rel_posix)}</a></li>')
+      - name: Set up ORAS
+        uses: oras-project/setup-oras@v1
 
-content = f"""<!doctype html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8">
-    <title>Scrubby Buddy Installers</title>
-    <style>
-      body {{ font-family: Arial, sans-serif; padding: 2rem; }}
-      h1 {{ color: #e91e63; }}
-    </style>
-  </head>
-  <body>
-    <h1>Scrubby Buddy Installers</h1>
-    <p>Download the latest installers produced from the main branch.</p>
-    <ul>
-      {''.join(links)}
-    </ul>
-  </body>
-</html>
-"""
-(root / "index.html").write_text(content, encoding="utf-8")
-PY
+      - name: Login to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
 
-      - name: Configure GitHub Pages
-        uses: actions/configure-pages@v5
-
-      - name: Upload Pages artifact
-        uses: actions/upload-pages-artifact@v3
-        with:
-          path: site
-
-      - name: Deploy to GitHub Pages
-        id: deployment
-        uses: actions/deploy-pages@v4
+      - name: Publish archive to GitHub Packages
+        env:
+          IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/scrubby-buddy-installers
+        run: |
+          oras push "${IMAGE_NAME}:latest" scrubby-buddy-installers.tar.gz:application/gzip
