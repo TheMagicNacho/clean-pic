@@ -155,11 +155,15 @@ jobs:
         uses: oras-project/setup-oras@v1
 
       - name: Login to GHCR
-        run: printf '%s' "${{ secrets.GITHUB_TOKEN }}" | oras login ghcr.io -u "${{ github.actor }}" --password-stdin
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Publish archive to GitHub Packages
         env:
           IMAGE_NAME: ghcr.io/${{ github.repository_owner }}/scrubby-buddy-installers
           IMAGE_TAG: ${{ github.sha }}
         run: |
-          oras push "${IMAGE_NAME}:${IMAGE_TAG}" scrubby-buddy-installers.tar.gz:application/gzip
+          oras push "${IMAGE_NAME}:${IMAGE_TAG}" scrubby-buddy-installers.tar.gz:application/vnd.oci.image.layer.v1.tar+gzip
