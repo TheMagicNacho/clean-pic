@@ -1,0 +1,200 @@
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  format_and_static:
+    name: Format and static analysis
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Static checks
+        run: npm run check
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+
+      - name: Rust format check
+        run: cargo fmt --all -- --check
+
+  sbom:
+    name: SBOM generation
+    needs: format_and_static
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Generate SBOM
+        uses: anchore/sbom-action@v0
+        with:
+          output-file: sbom.spdx.json
+
+      - name: Upload SBOM
+        uses: actions/upload-artifact@v4
+        with:
+          name: sbom
+          path: sbom.spdx.json
+
+  security:
+    name: Security analysis
+    needs: format_and_static
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install cargo-audit
+        run: cargo install cargo-audit --locked
+
+      - name: Cargo audit
+        run: cargo audit
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: npm audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+  build-bundles:
+    name: Build installers (${{ matrix.platform }})
+    needs: [format_and_static, sbom, security]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest, macos-latest]
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Set up Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Build Tauri bundles
+        id: tauri_build
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          projectPath: .
+
+      - name: Upload bundle artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tauri-${{ matrix.platform }}
+          path: src-tauri/target/release/bundle/**/*
+          if-no-files-found: error
+
+  pages:
+    name: Publish installers to GitHub Pages
+    needs: build-bundles
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Download bundle artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: tauri-*
+          merge-multiple: true
+          path: site/downloads
+
+      - name: Generate index
+        run: |
+          cd site
+          python - <<'PY'
+import html
+import pathlib
+
+root = pathlib.Path(".")
+downloads = root / "downloads"
+links = []
+for file in sorted(downloads.rglob("*")):
+    if file.is_file():
+        rel = file.relative_to(root)
+        rel_posix = rel.as_posix()
+        links.append(f'<li><a href="{html.escape(rel_posix)}">{html.escape(rel_posix)}</a></li>')
+
+content = f"""<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8">
+    <title>Scrubby Buddy Installers</title>
+    <style>
+      body {{ font-family: Arial, sans-serif; padding: 2rem; }}
+      h1 {{ color: #e91e63; }}
+    </style>
+  </head>
+  <body>
+    <h1>Scrubby Buddy Installers</h1>
+    <p>Download the latest installers produced from the main branch.</p>
+    <ul>
+      {''.join(links)}
+    </ul>
+  </body>
+</html>
+"""
+(root / "index.html").write_text(content, encoding="utf-8")
+PY
+
+      - name: Configure GitHub Pages
+        uses: actions/configure-pages@v5
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: site
+
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
