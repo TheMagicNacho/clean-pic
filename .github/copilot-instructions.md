@@ -34,43 +34,53 @@ The app is split across a Svelte frontend and a Rust backend connected via Tauri
 **Backend (`src-tauri/src/lib.rs`)** — All image processing logic lives here. Three Tauri commands handle: counting images, scrubbing metadata, and inspecting metadata. File I/O uses Tokio async.
 
 **IPC Pattern** — Frontend calls Rust via `invoke()`, Rust exposes functions with `#[tauri::command]`:
+
 ```ts
 // Frontend
-const result = await invoke("scrub_images", { path: folderPath, saveDirectory });
+const result = await invoke('scrub_images', { path: folderPath, saveDirectory });
 ```
+
 ```rust
 // Backend (lib.rs)
 #[tauri::command]
 async fn scrub_images(path: &str, save_directory: &str) -> Result<String, ()> { ... }
 ```
+
 New commands must be registered in the `.invoke_handler()` call inside `run()` in `lib.rs`.
 
 ## Key Conventions
 
 ### Svelte 5 Runes
+
 All state uses Svelte 5 runes — not Svelte stores or reactive declarations:
+
 ```ts
-let folderPath = $state("");
-let bearState: BearState = $state("waiting");
+let folderPath = $state('');
+let bearState: BearState = $state('waiting');
 ```
+
 Component props use `$props()`:
+
 ```ts
 let { state, message }: Props = $props();
 ```
 
 ### CSS
+
 - No CSS framework — pure scoped CSS inside `<style>` blocks
 - Kawaii color palette defined as CSS variables in `+page.svelte` (e.g. `--kawaii-hot-pink: #ff1493`, `--kawaii-soft-pink: #ffb6c1`, `--kawaii-text-dark: #4a0e4e`) — use these for any new UI
 - Font is Nunito, loaded via `@font-face` from `/static/fonts/`
 - Animations use named `@keyframes`; existing ones include `float`, `bounce`, `tilt`, `sparkle`, `blink`
 
 ### Rust
+
 - Async throughout — use `tokio::fs` for file I/O, not `std::fs`
 - JPEG segment filtering uses `img-parts`; EXIF parsing uses `kamadak-exif`
 - Only JPEG is supported (PNG/TIFF paths are stubbed/commented out)
 - Cleaned images are saved with random filenames (using `rand`)
 
 ### Tauri Plugins
+
 - `tauri-plugin-dialog` — native file/folder picker dialogs
 - `tauri-plugin-opener` — open a folder in the system file explorer
 - Both are initialized in `lib.rs` via `.plugin(...)` on the builder
