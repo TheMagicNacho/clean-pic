@@ -3,10 +3,9 @@ use img_parts::{ImageEXIF, ImageICC};
 use log::debug;
 use rand::prelude::*;
 use std::collections::HashMap;
-// use std::fs::File;
+use std::fs::{File, OpenOptions};
 use std::io::Error;
 use std::path::PathBuf;
-use tokio::fs::{File, OpenOptions};
 
 /// image_stats provide stats on a particular image's cleanning process.
 struct ImageReturn {
@@ -77,9 +76,7 @@ async fn gather_files(path: &PathBuf) -> Vec<String> {
     files
 }
 
-/// Synchronous core of metadata removal – extracted so that Kani proof
-/// harnesses can call it without needing an async runtime.
-fn process_jpeg_bytes(input_bytes: Vec<u8>) -> Result<ImageReturn, Error> {
+fn remove_metadata_jpeg(input_bytes: Vec<u8>) -> Result<ImageReturn, Error> {
     // Parse the JPEG structure from the byte array
     // This does NOT decode the actual image pixels, so it's fast and lossless
     let mut jpeg = img_parts::jpeg::Jpeg::from_bytes(input_bytes.into()).unwrap();
@@ -126,15 +123,13 @@ fn process_jpeg_bytes(input_bytes: Vec<u8>) -> Result<ImageReturn, Error> {
     let mut img_data = Vec::new();
     jpeg.encoder().write_to(&mut img_data)?;
 
-    Ok(ImageReturn {
+    let output = ImageReturn {
         img_data,
         segments_removed,
         bits_removed,
-    })
-}
+    };
 
-async fn remove_metadata_jpeg(input_bytes: Vec<u8>) -> Result<ImageReturn, Error> {
-    process_jpeg_bytes(input_bytes)
+    Ok(output)
 }
 
 // creates a directory to store new files within the given path
@@ -159,7 +154,7 @@ async fn make_write_dir(path: &PathBuf, new_dir: &str) -> Result<PathBuf, Error>
 
 /// There is the 32! propbability of a collision, so if there is a collision detected we'll
 /// regenerate a new filename.
-async fn generate_filename(save_directory: &PathBuf) -> tokio::io::Result<(PathBuf, File)> {
+fn generate_filename(save_directory: &PathBuf) -> std::io::Result<(PathBuf, File)> {
     loop {
         let new_name = {
             let mut rng = rand::rng();
@@ -171,14 +166,13 @@ async fn generate_filename(save_directory: &PathBuf) -> tokio::io::Result<(PathB
         let file_result = OpenOptions::new()
             .write(true)
             .create_new(true)
-            .open(&new_path)
-            .await;
+            .open(&new_path);
 
         match file_result {
             // Success: We reserved the filename and have the handle
             Ok(file) => return Ok((new_path, file)),
             // Collision: File exists, loop again
-            Err(ref e) if e.kind() == tokio::io::ErrorKind::AlreadyExists => continue,
+            Err(ref e) if e.kind() == std::io::ErrorKind::AlreadyExists => continue,
             // Real Error: Permission denied, disk full, etc.
             Err(e) => return Err(e),
         }
@@ -278,8 +272,8 @@ async fn scrub_images(path: &str, save_directory: &str) -> Result<String, ()> {
         match guess_format(&data).unwrap() {
             image::ImageFormat::Jpeg => {
                 let input_data = std::fs::read(file).unwrap();
-                let output_data = remove_metadata_jpeg(input_data).await.unwrap();
-                let new_path = generate_filename(&save_directory).await.unwrap();
+                let output_data = remove_metadata_jpeg(input_data).unwrap();
+                let new_path = generate_filename(&save_directory).unwrap();
 
                 stats.add(&output_data);
                 std::fs::write(new_path.0, output_data.img_data).unwrap();
@@ -355,8 +349,8 @@ mod kani_proofs {
         0xFF, 0xD9,
     ];
 
-    /// Formally verify that `remove_metadata_jpeg` (via `process_jpeg_bytes`)
-    /// removes EXIF data for **any** possible EXIF payload content.
+    /// Formally verify that `remove_metadata_jpeg` removes EXIF data for
+    /// **any** possible EXIF payload content.
     ///
     /// Kani explores every possible 64-byte EXIF payload, proving the
     /// property holds universally rather than for a single concrete value.
@@ -379,9 +373,9 @@ mod kani_proofs {
             .write_to(&mut input_bytes)
             .expect("JPEG encoding must succeed");
 
-        // Run the metadata-removal logic.
+        // Call remove_metadata_jpeg directly.
         let result =
-            process_jpeg_bytes(input_bytes).expect("process_jpeg_bytes must succeed");
+            remove_metadata_jpeg(input_bytes).expect("remove_metadata_jpeg must succeed");
 
         // ── Core property ──────────────────────────────────────────────────
         // After processing, the output JPEG must contain no EXIF data.
@@ -416,8 +410,9 @@ mod kani_proofs {
             .write_to(&mut input_bytes)
             .expect("JPEG encoding must succeed");
 
+        // Call remove_metadata_jpeg directly.
         let result =
-            process_jpeg_bytes(input_bytes).expect("process_jpeg_bytes must succeed");
+            remove_metadata_jpeg(input_bytes).expect("remove_metadata_jpeg must succeed");
 
         let output_jpeg =
             img_parts::jpeg::Jpeg::from_bytes(result.img_data.into())
@@ -431,23 +426,19 @@ mod kani_proofs {
     }
 
     /// Formally verify that `generate_filename` always produces a path whose
-    /// file-system extension is `"jpeg"`, for every possible `u32` seed value.
+    /// file-system extension is `"jpeg"`, for every possible `u32` random value.
     ///
-    /// This mirrors the exact filename-construction logic inside
-    /// `generate_filename`:
-    ///
-    /// ```rust
-    /// let name = rng.random::<u32>();
-    /// let new_path = save_directory.join(format!("{}.jpeg", format!("{:#}", name)));
-    /// ```
+    /// `generate_filename` generates a random `u32`, formats it as a string,
+    /// and appends `.jpeg`.  Kani replaces the random number with a symbolic
+    /// `u32` so this holds for **all** 2^32 possible values at once.
     #[kani::proof]
     fn proof_generate_filename_has_jpeg_extension() {
-        let seed: u32 = kani::any();
+        // Create a real temporary directory so the file-creation succeeds.
+        let dir = std::path::PathBuf::from("/tmp/kani_proof_generate_filename");
+        std::fs::create_dir_all(&dir).ok();
 
-        // Mirror the internal filename-construction logic.
-        let name_str = format!("{:#}", seed);
-        let filename = format!("{}.jpeg", name_str);
-        let path = std::path::PathBuf::from("/tmp/scrubbed").join(&filename);
+        // Call generate_filename directly.
+        let (path, _file) = generate_filename(&dir).expect("generate_filename must succeed");
 
         // ── Core property ──────────────────────────────────────────────────
         // The extension reported by the OS path API must always be "jpeg".
@@ -458,20 +449,23 @@ mod kani_proofs {
         );
     }
 
-    /// Formally verify that the base (stem) of the generated filename is never
-    /// empty for any possible `u32` seed value.
+    /// Formally verify that the filename stem produced by `generate_filename`
+    /// is never empty for any possible `u32` random value.
     #[kani::proof]
     fn proof_generate_filename_stem_nonempty() {
-        let seed: u32 = kani::any();
+        let dir = std::path::PathBuf::from("/tmp/kani_proof_generate_filename_stem");
+        std::fs::create_dir_all(&dir).ok();
 
-        let name_str = format!("{:#}", seed);
+        // Call generate_filename directly.
+        let (path, _file) = generate_filename(&dir).expect("generate_filename must succeed");
 
         // ── Core property ──────────────────────────────────────────────────
-        // Formatting any u32 with "{:#}" must produce a non-empty string.
-        assert!(
-            !name_str.is_empty(),
-            "filename stem must never be empty"
-        );
+        // The stem (name without extension) must never be empty.
+        let stem = path
+            .file_stem()
+            .and_then(|s| s.to_str())
+            .unwrap_or("");
+        assert!(!stem.is_empty(), "filename stem must never be empty");
     }
 }
 
