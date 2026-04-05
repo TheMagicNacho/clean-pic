@@ -39,4 +39,23 @@ describe('KawaiBear', () => {
 		const bearEl = container.querySelector('.bear.looking');
 		await expect.element(page.elementLocator(bearEl!)).toBeInTheDocument();
 	});
+
+	it('shows a speech bubble with the message text when state is talking', async () => {
+		// Arrange
+		const testMessage = 'Squeaky clean, just for you!';
+
+		// Act
+		await render(KawaiBear, { state: 'talking', message: testMessage });
+
+		// Assert
+		await expect.element(page.getByText(testMessage)).toBeInTheDocument();
+	});
+
+	it('does not show a speech bubble when state is not talking', async () => {
+		// Arrange & Act
+		await render(KawaiBear, { state: 'waiting', message: 'Hidden message' });
+
+		// Assert
+		await expect.element(page.getByText('Hidden message')).not.toBeInTheDocument();
+	});
 });

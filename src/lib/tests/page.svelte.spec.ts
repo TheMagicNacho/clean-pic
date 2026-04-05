@@ -75,9 +75,7 @@ describe('+page.svelte', () => {
 			await inspectButton.hover({ force: true });
 
 			// Assert - the speech bubble appears with the inspect-view message
-			await expect
-				.element(page.getByText(/Let's switch to inspect mode/))
-				.toBeInTheDocument();
+			await expect.element(page.getByText(/Let's switch to inspect mode/)).toBeInTheDocument();
 		});
 	});
 
