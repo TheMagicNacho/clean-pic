@@ -309,12 +309,41 @@ fn count_images(path: &str) -> u64 {
         }
     }
 }
+/// # Running the tests
+///
+/// These tests require no external services or environment setup. From the
+/// `src-tauri/` directory run:
+///
+/// ```bash
+/// cargo test
+/// ```
+///
+/// To see live output (e.g. `println!` / `eprintln!` statements) pass the
+/// `--nocapture` flag:
+///
+/// ```bash
+/// cargo test -- --nocapture
+/// ```
+///
+/// To run a single test by name:
+///
+/// ```bash
+/// cargo test tests::test_gather_files_finds_all_jpegs
+/// cargo test tests::test_scrub_removes_metadata_from_test_images
+/// ```
+///
+/// The test assets live in `src-tauri/tests/assets/` and are committed to the
+/// repository — no extra download step is required.
 #[cfg(test)]
 mod tests {
     use super::*;
     use std::fs;
     use std::path::PathBuf;
 
+    /// Returns the path to the committed test-asset directory.
+    /// `env!("CARGO_MANIFEST_DIR")` resolves to `src-tauri/` at compile time,
+    /// so the assets are always located relative to the crate root regardless
+    /// of where `cargo test` is invoked from.
     fn assets_dir() -> PathBuf {
         PathBuf::from(env!("CARGO_MANIFEST_DIR"))
             .join("tests")
@@ -346,7 +375,11 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test: gather_files finds all three test images
+    // Test: gather_files discovers all four test images
+    //
+    // Verifies that `gather_files` correctly walks a directory and returns
+    // every file whose extension matches a supported JPEG extension (.jpg /
+    // .jpeg). The assets directory contains exactly 4 test images.
     // -----------------------------------------------------------------------
     #[tokio::test]
     async fn test_gather_files_finds_all_jpegs() {
@@ -361,12 +394,12 @@ mod tests {
 
         assert_eq!(
             files.len(),
-            3,
-            "Expected 3 JPEG files in assets dir, found {}",
+            4,
+            "Expected 4 JPEG files in assets dir, found {}",
             files.len()
         );
 
-        let expected = ["fish_tacos.jpg", "hamburger.jpg", "pancakes.jpg"];
+        let expected = ["burger.jpg", "tacos.jpg", "white1.jpeg", "white2.jpeg"];
         for name in &expected {
             assert!(
                 files.iter().any(|f| f.ends_with(name)),
@@ -377,16 +410,25 @@ mod tests {
     }
 
     // -----------------------------------------------------------------------
-    // Test: each image has metadata before scrubbing and none after
+    // Test: remove_metadata_jpeg strips all metadata from the test images
+    //
+    // For each test asset the test:
+    //   1. Confirms the original file contains EXIF data and strippable
+    //      metadata segments.
+    //   2. Calls `remove_metadata_jpeg` to scrub the file in memory.
+    //   3. Writes the cleaned bytes to a temporary directory (auto-deleted
+    //      via `tempfile::TempDir`'s RAII drop, even if the test panics).
+    //   4. Re-reads the written file and asserts that no EXIF remains and
+    //      that the total number of metadata segments has decreased.
     // -----------------------------------------------------------------------
     #[tokio::test]
     async fn test_scrub_removes_metadata_from_test_images() {
         let assets = assets_dir();
         // `tempfile::TempDir` removes the directory automatically when dropped,
-        // ensuring cleanup even if an assertion panics.
+        // ensuring cleanup even if an assertion panics mid-loop.
         let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
 
-        let test_images = ["fish_tacos.jpg", "hamburger.jpg", "pancakes.jpg"];
+        let test_images = ["burger.jpg", "tacos.jpg", "white1.jpeg", "white2.jpeg"];
 
         for img_name in &test_images {
             let img_path = assets.join(img_name);
@@ -416,19 +458,18 @@ mod tests {
             );
 
             // --- Remove metadata ---
-            let result = remove_metadata_jpeg(original_bytes)
+            let result = remove_metadata_jpeg(original_bytes.clone())
                 .await
                 .unwrap_or_else(|e| panic!("remove_metadata_jpeg failed for {}: {}", img_name, e));
 
+            // The cleaned output must be strictly smaller than the original
+            // because at least the EXIF APP1 segment was removed.
             assert!(
-                result.segments_removed > 0,
-                "Expected segments to be removed from '{}'",
-                img_name
-            );
-            assert!(
-                result.bits_removed > 0,
-                "Expected bits to be removed from '{}'",
-                img_name
+                result.img_data.len() < original_bytes.len(),
+                "Cleaned '{}' ({} bytes) should be smaller than original ({} bytes)",
+                img_name,
+                result.img_data.len(),
+                original_bytes.len()
             );
 
             // --- Write cleaned image to temp directory ---
@@ -437,12 +478,11 @@ mod tests {
                 .unwrap_or_else(|e| panic!("Failed to write cleaned image {}: {}", img_name, e));
 
             // --- Inspect metadata after scrubbing ---
-            let cleaned_bytes =
-                fs::read(&output_path).unwrap_or_else(|_| panic!("Failed to read cleaned {:?}", output_path));
+            let cleaned_bytes = fs::read(&output_path)
+                .unwrap_or_else(|_| panic!("Failed to read cleaned {:?}", output_path));
 
-            let cleaned_jpeg =
-                img_parts::jpeg::Jpeg::from_bytes(cleaned_bytes.into())
-                    .unwrap_or_else(|_| panic!("Failed to parse cleaned JPEG: {}", img_name));
+            let cleaned_jpeg = img_parts::jpeg::Jpeg::from_bytes(cleaned_bytes.into())
+                .unwrap_or_else(|_| panic!("Failed to parse cleaned JPEG: {}", img_name));
 
             assert!(
                 cleaned_jpeg.exif().is_none(),
@@ -460,8 +500,8 @@ mod tests {
             );
         }
 
-        // `temp_dir` is dropped here, which automatically removes the directory
-        // and all cleaned images written into it.
+        // `temp_dir` is dropped here, which automatically removes the temp
+        // directory and all cleaned images written into it.
     }
 }
 
