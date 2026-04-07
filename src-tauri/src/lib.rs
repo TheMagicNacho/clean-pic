@@ -439,9 +439,8 @@ mod tests {
                 fs::read(&img_path).unwrap_or_else(|_| panic!("Failed to read {:?}", img_path));
 
             // --- Inspect metadata before scrubbing ---
-            let original_jpeg =
-                img_parts::jpeg::Jpeg::from_bytes(original_bytes.clone().into())
-                    .unwrap_or_else(|_| panic!("Failed to parse JPEG: {}", img_name));
+            let original_jpeg = img_parts::jpeg::Jpeg::from_bytes(original_bytes.clone().into())
+                .unwrap_or_else(|_| panic!("Failed to parse JPEG: {}", img_name));
 
             let has_exif_before = original_jpeg.exif().is_some();
             let metadata_segments_before = count_metadata_segments(&original_jpeg);

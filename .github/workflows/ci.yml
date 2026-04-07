@@ -77,18 +77,18 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Generate CycloneDX SBOM
+      - name: Generate SPDX SBOM
         uses: anchore/sbom-action@v0
         with:
           path: ./
-          format: cyclonedx-json
+          format: spdx-json
           output-file: sbom.json
-          artifact-name: cyclonedx-sbom
+          artifact-name: spdx-sbom
           upload-artifact: true
 
       - name: Scan SBOM for vulnerabilities
         id: scan
-        uses: anchore/scan-action@v3
+        uses: anchore/scan-action@v7
         with:
           sbom: sbom.json
           fail-build: true
