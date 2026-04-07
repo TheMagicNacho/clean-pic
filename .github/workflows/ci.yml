@@ -83,6 +83,7 @@ jobs:
         uses: model-checking/kani-github-action@v1.1
         with:
           working-directory: src-tauri
+          args: "-Z async-lib"
 
   sbom:
     name: SBOM & Vulnerability Scan

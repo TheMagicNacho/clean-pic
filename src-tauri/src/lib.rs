@@ -334,18 +334,12 @@ mod kani_proofs {
         // SOI
         0xFF, 0xD8,
         // APP0 marker + length (16 bytes total, including the 2-byte length field)
-        0xFF, 0xE0, 0x00, 0x10,
-        // "JFIF\0" identifier
-        0x4A, 0x46, 0x49, 0x46, 0x00,
-        // Version 1.1
-        0x01, 0x01,
-        // Pixel density units: no units
-        0x00,
-        // X/Y pixel density: 1×1
-        0x00, 0x01, 0x00, 0x01,
-        // No embedded thumbnail
-        0x00, 0x00,
-        // EOI
+        0xFF, 0xE0, 0x00, 0x10, // "JFIF\0" identifier
+        0x4A, 0x46, 0x49, 0x46, 0x00, // Version 1.1
+        0x01, 0x01, // Pixel density units: no units
+        0x00, // X/Y pixel density: 1×1
+        0x00, 0x01, 0x00, 0x01, // No embedded thumbnail
+        0x00, 0x00, // EOI
         0xFF, 0xD9,
     ];
 
@@ -357,15 +351,17 @@ mod kani_proofs {
     #[kani::proof]
     fn proof_remove_metadata_jpeg_removes_exif() {
         // Build a minimal JPEG and inject an arbitrary EXIF payload.
-        let mut jpeg =
-            img_parts::jpeg::Jpeg::from_bytes(MINIMAL_JPEG.to_vec().into())
-                .expect("minimal JPEG must parse");
+        let mut jpeg = img_parts::jpeg::Jpeg::from_bytes(MINIMAL_JPEG.to_vec().into())
+            .expect("minimal JPEG must parse");
 
         let exif_payload: [u8; 64] = kani::any();
         jpeg.set_exif(Some(exif_payload.to_vec().into()));
 
         // Sanity check: EXIF must be present before processing.
-        assert!(jpeg.exif().is_some(), "EXIF should be present before processing");
+        assert!(
+            jpeg.exif().is_some(),
+            "EXIF should be present before processing"
+        );
 
         // Serialise the JPEG with embedded EXIF.
         let mut input_bytes: Vec<u8> = Vec::new();
@@ -379,9 +375,8 @@ mod kani_proofs {
 
         // ── Core properties ────────────────────────────────────────────────
         // Parse the output so we can inspect its segments.
-        let output_jpeg =
-            img_parts::jpeg::Jpeg::from_bytes(result.img_data.into())
-                .expect("output must be a valid JPEG");
+        let output_jpeg = img_parts::jpeg::Jpeg::from_bytes(result.img_data.into())
+            .expect("output must be a valid JPEG");
 
         // 1. No EXIF data present.
         assert!(
@@ -414,9 +409,8 @@ mod kani_proofs {
     /// **any** possible ICC payload content.
     #[kani::proof]
     fn proof_remove_metadata_jpeg_removes_icc_profile() {
-        let mut jpeg =
-            img_parts::jpeg::Jpeg::from_bytes(MINIMAL_JPEG.to_vec().into())
-                .expect("minimal JPEG must parse");
+        let mut jpeg = img_parts::jpeg::Jpeg::from_bytes(MINIMAL_JPEG.to_vec().into())
+            .expect("minimal JPEG must parse");
 
         let icc_payload: [u8; 32] = kani::any();
         jpeg.set_icc_profile(Some(icc_payload.to_vec().into()));
@@ -435,9 +429,8 @@ mod kani_proofs {
         let result = kani::block_on(remove_metadata_jpeg(input_bytes))
             .expect("remove_metadata_jpeg must succeed");
 
-        let output_jpeg =
-            img_parts::jpeg::Jpeg::from_bytes(result.img_data.into())
-                .expect("output must be a valid JPEG");
+        let output_jpeg = img_parts::jpeg::Jpeg::from_bytes(result.img_data.into())
+            .expect("output must be a valid JPEG");
 
         // ── Core property ──────────────────────────────────────────────────
         assert!(
@@ -455,8 +448,8 @@ mod kani_proofs {
         std::fs::create_dir_all(&dir).ok();
 
         // Call generate_filename directly (async fn driven by kani::block_on).
-        let (path, _file) = kani::block_on(generate_filename(&dir))
-            .expect("generate_filename must succeed");
+        let (path, _file) =
+            kani::block_on(generate_filename(&dir)).expect("generate_filename must succeed");
 
         // ── Core property ──────────────────────────────────────────────────
         // The extension reported by the OS path API must always be "jpeg".
@@ -475,15 +468,12 @@ mod kani_proofs {
         std::fs::create_dir_all(&dir).ok();
 
         // Call generate_filename directly (async fn driven by kani::block_on).
-        let (path, _file) = kani::block_on(generate_filename(&dir))
-            .expect("generate_filename must succeed");
+        let (path, _file) =
+            kani::block_on(generate_filename(&dir)).expect("generate_filename must succeed");
 
         // ── Core property ──────────────────────────────────────────────────
         // The stem (name without extension) must never be empty.
-        let stem = path
-            .file_stem()
-            .and_then(|s| s.to_str())
-            .unwrap_or("");
+        let stem = path.file_stem().and_then(|s| s.to_str()).unwrap_or("");
         assert!(!stem.is_empty(), "filename stem must never be empty");
     }
 }
