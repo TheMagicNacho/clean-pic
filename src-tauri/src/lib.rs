@@ -1,3 +1,4 @@
+#![allow(non_snake_case)]
 use image::guess_format;
 use img_parts::{ImageEXIF, ImageICC};
 use log::debug;
@@ -49,15 +50,13 @@ fn is_image(path: PathBuf) -> bool {
     .cloned()
     .collect();
 
-    if let Some(extension) = path.extension()
-        && let Some(ext_str) = extension.to_str()
-    {
+    if let Some(ext_str) = path.extension().and_then(|e| e.to_str()) {
         return img_extensions.contains_key(&ext_str.to_lowercase()[..]);
     }
     false
 }
 
-async fn gather_files(path: &PathBuf) -> Vec<String> {
+async fn gather_files(path: &Path) -> Vec<String> {
     let mut files: Vec<String> = Vec::new();
     match tokio::fs::read_dir(path).await {
         Ok(mut dir) => {
