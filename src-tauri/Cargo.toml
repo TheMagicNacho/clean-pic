@@ -48,4 +48,5 @@ kamadak-exif = "0.6.1"
 # by the Kani toolchain (suppresses the `unexpected_cfgs` lint).
 [lints.rust]
 unexpected_cfgs = { level = "warn", check-cfg = ['cfg(kani)'] }
+non_snake_case = "allow"
 
